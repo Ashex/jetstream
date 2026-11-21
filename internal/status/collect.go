@@ -17,6 +17,7 @@ import (
 	"github.com/bluesky-social/jetstream/internal/lifecycle"
 	"github.com/bluesky-social/jetstream/internal/manifest"
 	"github.com/bluesky-social/jetstream/internal/metastore"
+	"github.com/bluesky-social/jetstream/internal/retention"
 	"github.com/bluesky-social/jetstream/internal/version"
 	"github.com/jcalabro/atmos"
 	"github.com/jcalabro/atmos/identity"
@@ -708,6 +709,12 @@ func build(ctx context.Context, opts Options, startedAt time.Time) (*Snapshot, e
 		Pebble:           pdb,
 	}
 
+	retentionStats, err := collectRetention(ctx, opts)
+	if err != nil {
+		return nil, err
+	}
+	snap.Retention = retentionStats
+
 	snap.CursorLookback.ConfiguredLookback = opts.CursorLookback
 	if opts.Manifest != nil && opts.CursorLookback > 0 {
 		snap.CursorLookback.ManifestSegmentCount = opts.Manifest.SegmentCount()
@@ -741,4 +748,23 @@ func buildForRequest(ctx context.Context, opts Options, startedAt time.Time, req
 	}
 
 	return snap, nil
+}
+
+func collectRetention(ctx context.Context, opts Options) (RetentionStats, error) {
+	stats := RetentionStats{Window: opts.RetentionWindow}
+	if opts.Retention != nil {
+		floor := opts.Retention.Floor()
+		stats.FloorSeq = floor.Seq
+		if floor.WitnessedAt != 0 {
+			stats.FloorAt = time.UnixMicro(floor.WitnessedAt)
+		}
+	}
+	since, ok, err := retention.LoadLiveOnlySince(ctx, opts.Store)
+	if err != nil {
+		return RetentionStats{}, fmt.Errorf("status: %w", err)
+	}
+	if ok {
+		stats.LiveOnlySince = since
+	}
+	return stats, nil
 }

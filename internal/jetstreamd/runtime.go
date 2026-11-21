@@ -524,6 +524,8 @@ func Build(ctx context.Context, opts Options) (*Runtime, error) {
 		ArchiveReady:          catalogLoad.Wait,
 		Manifest:              mft,
 		CursorLookback:        opts.CursorLookback,
+		Retention:             retentionHolder,
+		RetentionWindow:       opts.RetentionWindow,
 		IdentityResolver:      resolver,
 		LastSeenUpstreamEvent: liveMetrics.LastSeenUpstreamEvent,
 		Writer:                writerPtr.Load,

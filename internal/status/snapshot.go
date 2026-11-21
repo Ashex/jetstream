@@ -20,6 +20,7 @@ type Snapshot struct {
 	SegmentAggregate *SegmentAggregate
 	Pebble           PebbleStats
 	CursorLookback   CursorLookbackStats
+	Retention        RetentionStats
 	Hosts            HostDiagnostics
 	Account          AccountLookup
 }
@@ -170,6 +171,22 @@ type SegmentSummary struct {
 type PebbleStats struct {
 	DiskBytes      int64
 	KeyspaceCounts map[string]uint64
+}
+
+// RetentionStats is the Northsky fork's window-pruning state: what the
+// archive keeps, and the floor below which it no longer holds anything.
+type RetentionStats struct {
+	// Window is the configured --retention-window; zero keeps everything.
+	Window time.Duration
+	// FloorSeq is the first seq the archive may still hold; zero until a
+	// segment was pruned.
+	FloorSeq uint64
+	// FloorAt is the witnessed time of the newest pruned event. Zero until
+	// a segment with events was pruned.
+	FloorAt time.Time
+	// LiveOnlySince is when this data dir first started live-only. Zero for
+	// a data dir that bootstrapped.
+	LiveOnlySince time.Time
 }
 
 // CursorLookbackStats summarizes the cursor-replay observability

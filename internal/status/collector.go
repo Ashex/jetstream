@@ -9,6 +9,7 @@ import (
 	"github.com/bluesky-social/jetstream/internal/ingest"
 	"github.com/bluesky-social/jetstream/internal/manifest"
 	"github.com/bluesky-social/jetstream/internal/metastore"
+	"github.com/bluesky-social/jetstream/internal/retention"
 	"github.com/jcalabro/atmos/identity"
 	"golang.org/x/sync/singleflight"
 )
@@ -41,6 +42,13 @@ type Options struct {
 	// duration. Zero means cursor replay is disabled; the snapshot
 	// reports zero values for the cursor-lookback panel.
 	CursorLookback time.Duration
+
+	// Retention is the archive's pruning floor. Optional; nil reports none.
+	Retention retention.Source
+
+	// RetentionWindow is the operator-configured --retention-window; zero
+	// means nothing is pruned.
+	RetentionWindow time.Duration
 
 	// IdentityResolver resolves one operator-supplied handle on the accounts
 	// tab. Optional; nil means handle lookup is limited to the local index.

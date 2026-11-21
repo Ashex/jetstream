@@ -321,6 +321,16 @@ document.addEventListener("input", function (event) {
       <dd>{{if .CursorLookback.OldestRetainedAt.IsZero}}<em>n/a</em>{{else}}{{humanInt64Cast .CursorLookback.OldestRetainedSeq}} <small>({{relativeTime .CursorLookback.OldestRetainedAt .Now}})</small>{{end}}</dd>
     </dl>
   </section>
+
+  <section>
+    <h2>Retention</h2>
+    <dl>
+      <dt>Window</dt><dd>{{if eq .Retention.Window 0}}keeps everything{{else}}keeps {{humanDuration .Retention.Window}}{{end}}</dd>
+      <dt>Floor</dt>
+      <dd>{{if eq .Retention.FloorSeq 0}}<em>nothing pruned yet</em>{{else}}holds seqs from {{humanInt64Cast .Retention.FloorSeq}}{{if not .Retention.FloorAt.IsZero}} (events witnessed after {{.Retention.FloorAt.Format "2006-01-02 15:04:05"}}){{end}}{{end}}</dd>
+      {{if not .Retention.LiveOnlySince.IsZero}}<dt>Live-only start</dt><dd>started live-only at {{.Retention.LiveOnlySince.Format "2006-01-02 15:04:05"}}</dd>{{end}}
+    </dl>
+  </section>
 {{end}}
 
 {{define "segmentFiles"}}
