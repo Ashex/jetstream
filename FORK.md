@@ -156,9 +156,13 @@ passes against it.
 
 ## Tags and images
 
-Tags are `v<newest upstream release in history>-northsky.<n>` (`git describe --tags --abbrev=0
-upstream/main` names it), for example `v0.4.6-northsky.1`. Never reuse an upstream tag name.
-`.github/workflows/northsky-image.yml` runs only on tags matching `v*-northsky.*`, only in `Ashex/jetstream`,
+The fork versions itself with its own semver, starting at `v1.0.0` (owner, 2026-11-21): a patch release for
+fixes, a minor for a new upstream merge or fork feature, a major for a change consumers must act on. Each
+release's annotated tag message names the upstream commit it is based on (`v1.0.0`: upstream `c9cbd1b`, after
+`v0.4.6`). Upstream's tags are `v0.*` and are never pushed to `origin` (`git push origin main`, then the one new
+tag by name; never `--tags`), so no fork tag reuses an upstream name. If upstream ever reaches `v1`, the next
+fork release moves to a major above upstream's and this section says so.
+`.github/workflows/northsky-image.yml` runs only on tags matching `v[1-9]*.*.*`, only in `Ashex/jetstream`,
 refuses to overwrite an existing tag, and pushes `ghcr.io/ashex/jetstream:<tag>` for linux/amd64 from
 upstream's unchanged `Dockerfile`. Upstream's `release.yml` is untouched. Pushing the tag and publishing the
 image are the owner's.

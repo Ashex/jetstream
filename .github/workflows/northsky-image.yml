@@ -1,5 +1,5 @@
-# Publish the Northsky fork's container image to GHCR, on tags named
-# v<upstream release>-northsky.<n> only. Upstream's release.yml stays as it is;
+# Publish the Northsky fork's container image to GHCR, on the fork's own semver
+# tags (v1.0.0 and up) only. Upstream's release.yml stays as it is;
 # its repository guard keeps it from running in the fork.
 #
 # Security posture matches ci.yml: push-only triggers, no default token
@@ -11,7 +11,7 @@ name: northsky-image
 
 on:
   push:
-    tags: ["v*-northsky.*"]
+    tags: ["v[1-9]*.*.*"]
 
 permissions: {}
 
