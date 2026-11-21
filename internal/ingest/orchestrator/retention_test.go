@@ -545,3 +545,23 @@ func TestRetentionRun_DefaultedWindowPrunesAnArchiveStartedLiveOnlyOrAlreadyPrun
 		})
 	}
 }
+
+func TestRetentionRun_AnInterruptedLiveOnlyStartIsNotUnlockedByALaterBootstrap(t *testing.T) {
+	t.Parallel()
+	relay := newRecordingRelay(t)
+	st := newOrchestratorTestStore(t)
+	// startLiveOnly wrote its marker, then the process died before the phase.
+	require.NoError(t, retention.SaveLiveOnlySinceIfAbsent(t.Context(), st, time.Now()))
+
+	err := runLiveOnlyUntilSubscribed(t, retentionRunConfig(t, relay, st), relay)
+
+	require.ErrorContains(t, err, "a live-only start was interrupted; restart with --live-only")
+	phase, perr := lifecycle.ReadPhase(t.Context(), st)
+	require.NoError(t, perr)
+	require.Empty(t, phase, "no bootstrap phase was written")
+	require.Empty(t, relay.seen())
+
+	live := retentionRunConfig(t, relay, st)
+	live.LiveOnly = true
+	require.NoError(t, runLiveOnlyUntilSubscribed(t, live, relay), "restarting with --live-only finishes the start")
+}

@@ -11,8 +11,10 @@ export GOTOOLCHAIN=${GOTOOLCHAIN:-go1.27.3}
 # check what's being committed, not unstaged or untracked files beside it
 if ! git diff --quiet || [[ -n "$(git ls-files --others --exclude-standard)" ]]; then
     git stash push --keep-index --include-untracked --quiet --message "pre-commit"
-    trap 'git stash pop --quiet' EXIT
+    stashed=1
 fi
+log=""
+trap 'rm -f "${log:-}"; if [[ -n ${stashed:-} ]]; then git stash pop --quiet; fi' EXIT
 
 step() { printf '\npre-commit: %s\n' "$*"; }
 
@@ -24,7 +26,6 @@ just test
 
 step "the live-only oracle scenario, alone"
 log="$(mktemp)"
-trap 'rm -f "$log"; if git stash list | grep -q "pre-commit"; then git stash pop --quiet; fi' EXIT
 go test ./internal/oracle -run '^TestOracle_LiveOnlyRetention$' -count=1 -v 2>&1 | tee "$log"
 if grep -q -- '--- SKIP: TestOracle_LiveOnlyRetention' "$log" || ! grep -q -- '--- PASS: TestOracle_LiveOnlyRetention' "$log"; then
     echo "pre-commit: TestOracle_LiveOnlyRetention did not pass (skipped or missing)" >&2

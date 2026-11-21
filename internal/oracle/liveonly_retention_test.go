@@ -309,6 +309,14 @@ func buildWindowModel(t *testing.T, events []segment.Event, floorSeq uint64) *wi
 // what Jetstream lost.
 func (wm *windowModel) expectedWindowFold(t *testing.T, w *world.World) map[RecordKey]uint64 {
 	t.Helper()
+	live, err := groundTruthLive(wm.expectedWindowEvents(t, w))
+	require.NoError(t, err)
+	return live
+}
+
+// expectedWindowEvents are the simulator's rows for the frames in the window.
+func (wm *windowModel) expectedWindowEvents(t *testing.T, w *world.World) []ObservedEvent {
+	t.Helper()
 	frames, err := w.FirehoseRange(0, int(w.CurrentSeq())+1)
 	require.NoError(t, err)
 	var observed []ObservedEvent
@@ -326,9 +334,7 @@ func (wm *windowModel) expectedWindowFold(t *testing.T, w *world.World) map[Reco
 		observed = append(observed, observedEventsFromSegments(segEvents)...)
 	}
 	require.NotEmpty(t, observed, "the window holds no simulator events: the scenario is vacuous")
-	live, err := groundTruthLive(observed)
-	require.NoError(t, err)
-	return live
+	return observed
 }
 
 // foldArchived folds events read back from Jetstream, translated to upstream
@@ -500,6 +506,23 @@ func testOracleLiveOnlyRetention(t *testing.T) {
 	}
 	require.True(t, foldsEqual(want, wm.foldArchived(t, EventsSortedBySeq(onDisk))),
 		"the retained segments do not fold to the simulator's ground truth restricted to the window")
+	// A fold cannot see a lost event that a later one supersedes. Compaction
+	// may drop a superseded create or update, but never a delete, identity,
+	// account or sync row, so every upstream frame in the window that carries
+	// one must still have a row on disk.
+	onDiskCursors := map[int64]bool{}
+	for _, ev := range onDisk {
+		onDiskCursors[wm.cursorOfSeq[ev.Seq]] = true
+	}
+	mustSurvive := 0
+	for _, ev := range wm.expectedWindowEvents(t, w) {
+		if ev.Kind == segment.KindCreate || ev.Kind == segment.KindUpdate || ev.Kind == segment.KindCreateResync {
+			continue
+		}
+		mustSurvive++
+		require.Truef(t, onDiskCursors[int64(ev.Seq)], "upstream cursor %d (%v) is in the window but no row for it is on disk", ev.Seq, ev.Kind)
+	}
+	require.Positive(t, mustSurvive, "the window holds no row that compaction must keep: the check is vacuous")
 
 	// 4. Restart: the floor and the refusals hold, and nothing re-bootstraps.
 	restarted := startLiveOnlyRuntime(t, cfg, sim, dataDir, onEvent)

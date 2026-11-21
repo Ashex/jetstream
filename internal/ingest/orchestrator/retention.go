@@ -137,6 +137,16 @@ func (o *Orchestrator) sealedMainSegments() ([]catalog.SegmentView, error) {
 // phase before upstream's first write, so a refused fresh data dir is left
 // untouched.
 func (o *Orchestrator) checkRetentionAllowed(ctx context.Context, phase lifecycle.Phase, now time.Time) error {
+	// An interrupted live-only start leaves its marker without a phase. A full
+	// bootstrap on top of it would later read as "started live-only" and let
+	// the defaulted window prune a full archive, so finish it live-only.
+	if phase == "" && !o.cfg.LiveOnly && o.cfg.Disaggregated == nil {
+		if _, ok, err := retention.LoadLiveOnlySince(ctx, o.cfg.Store); err != nil {
+			return err
+		} else if ok {
+			return fmt.Errorf("orchestrator: a live-only start was interrupted; restart with --live-only")
+		}
+	}
 	if o.cfg.RetentionWindow <= 0 || o.cfg.RetentionWindowExplicit || o.cfg.Disaggregated != nil {
 		return nil
 	}

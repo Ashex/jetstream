@@ -92,10 +92,13 @@ Every one is wiring, or (the two tests) a count pin and three invocations; the t
 
 - A sealed segment is removed only below the durable retention floor, which is committed before any file
   goes. The floor only rises.
-- On v2 and the archive endpoints a read below the floor is refused or announced, never skipped: v2 seq
-  cursor, `400 CursorTooOld`; v2 timestamp cursor, `#info OutdatedCursor`; `planSnapshot`, `400 CursorTooOld`;
-  a pruned segment, `404 SegmentNotFound`; a live reader the floor overtakes, an `InternalError` frame and then
-  `CursorTooOld` on redial.
+- On v2 and the archive endpoints a read below the floor is refused or announced, never skipped, with
+  two exceptions: v2 seq cursor, `400 CursorTooOld`; v2 timestamp cursor, `#info OutdatedCursor`;
+  `planSnapshot`, `400 CursorTooOld` (checked again after planning, so a prune that lands mid-request is
+  refused too); a pruned segment, `404 SegmentNotFound`; a live reader the floor overtakes, an
+  `InternalError` frame and then `CursorTooOld` on redial. The exceptions: `listSegments` lists only the
+  retained segments, with no signal (upstream's behaviour), and `getSegment` can answer `500` in the
+  opener's race between its manifest lookup and `os.Open` (`opener.go:57-68`, upstream's behaviour).
 - **v1 `/subscribe` clamps a cursor below the floor silently to it.** That is upstream's frozen v1 contract,
   kept by owner ruling and counted in `cursor_requests_total{mode="clamped"}`.
 - **Upstream's "deletion markers retained durably forever" (`docs/README.md:76`) does not hold on the
@@ -126,7 +129,8 @@ A pruning-stalled alert: `time() - jetstream_retention_floor_witnessed_timestamp
 The risky places are cursor resolution (`cursor.go`), the handler's error switches, `ColdReader.Read`, the
 compaction loop's `runPass`, `planSnapshot`'s handler, the manifest, the catalog, and anything that reads
 `segments/` in the background (it must join `WaitForArchiveLoad`). Keep upstream's side of a conflict and
-reapply the fork's few lines. Then rerun `just`, the retention tests by name, the live-only oracle scenario
+reapply the fork's few lines. Then rerun `just`, the fork's tests by name
+(`go test -short -count=1 ./... -run 'Retention|LiveOnly|RemoveSegment|KeepsEverything'`), the live-only oracle scenario
 (its own invocation), `just test-long ./internal/oracle`, `just oracle-sweep 3`, the mutant loop
 (`for p in testing/mutation/mutants/*.patch; do git apply --check "$p" 2>/dev/null || echo "STALE $p"; done`
 prints nothing; if a mutant goes stale, move the fork's edit, not the mutant) and `just mutation-gate` on a
@@ -143,6 +147,9 @@ passes against it.
 - The crash-point matrix for pruning is the strict-memory power-loss tests
   (`internal/ingest/orchestrator/retention_powerloss_test.go`); the subprocess restart harness drives the
   bootstrap chain and was not extended.
+- An interrupted live-only first start leaves `live_only_since` without a phase. A later start without
+  `--live-only` refuses ("a live-only start was interrupted; restart with --live-only"), so the marker cannot
+  unlock default pruning of a full archive.
 - Disaggregated pruning is deferred: it needs catalog transactions, object GC under `GC_DELAY` and follower
   views.
 - The `/status` repo verification reports partial repos on a windowed archive.

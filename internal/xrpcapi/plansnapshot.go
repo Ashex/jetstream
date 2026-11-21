@@ -82,12 +82,8 @@ func newPlanSnapshotHandler(src SegmentSource, cfg PlanConfig, syncer SeqSyncer,
 		if err != nil {
 			return nil, err
 		}
-		if floorSource != nil {
-			if f := floorSource.Floor().Seq; f > 0 && (!req.HasAfterSeq || req.AfterSeq+1 < f) {
-				metrics.incBelowRetention()
-				return nil, &xrpc.Error{StatusCode: http.StatusBadRequest, Name: "CursorTooOld",
-					Message: fmt.Sprintf("afterSeq %d is below the retention floor %d: this archive no longer holds seqs below %d; plan from afterSeq=%d", req.AfterSeq, f, f, f-1)}
-			}
+		if refusal := belowRetention(floorSource, req, metrics); refusal != nil {
+			return nil, refusal
 		}
 		if syncer != nil {
 			if seq, ok := planSyncSeq(req); ok {
@@ -101,6 +97,13 @@ func newPlanSnapshotHandler(src SegmentSource, cfg PlanConfig, syncer SeqSyncer,
 			}
 		}
 		plan, err := src.PlanSnapshot(req)
+		// A retention pass publishes its floor before it removes a segment, so
+		// a prune that landed during planning shows in the floor by now. Check
+		// again, or the plan would start at the oldest retained segment with no
+		// signal that seqs below it were skipped.
+		if refusal := belowRetention(floorSource, req, metrics); refusal != nil {
+			return nil, refusal
+		}
 		if err != nil {
 			if errors.Is(err, manifest.ErrInvalidPlanRequest) {
 				// Defense in depth: planRequestFromInput already rejects the
@@ -118,6 +121,21 @@ func newPlanSnapshotHandler(src SegmentSource, cfg PlanConfig, syncer SeqSyncer,
 		}
 		return out, nil
 	})
+}
+
+// belowRetention answers 400 CursorTooOld when req would start below the
+// retention floor, and counts it; nil when it does not or there is no floor.
+func belowRetention(floorSource retention.Source, req manifest.PlanSnapshotRequest, metrics *Metrics) *xrpc.Error {
+	if floorSource == nil {
+		return nil
+	}
+	f := floorSource.Floor().Seq
+	if f == 0 || (req.HasAfterSeq && req.AfterSeq+1 >= f) {
+		return nil
+	}
+	metrics.incBelowRetention()
+	return &xrpc.Error{StatusCode: http.StatusBadRequest, Name: "CursorTooOld",
+		Message: fmt.Sprintf("afterSeq %d is below the retention floor %d: this archive no longer holds seqs below %d; plan from afterSeq=%d", req.AfterSeq, f, f, f-1)}
 }
 
 // planSyncSeq returns the highest seq req names: afterSeq, or the last seq
