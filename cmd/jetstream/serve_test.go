@@ -539,6 +539,7 @@ func TestServe_BootstrapsAndShutsDownCleanly(t *testing.T) {
 			"--shutdown-timeout=5s",
 			"--relay-url=" + relay.URL,
 			"--data-dir=" + dataDir,
+			"--retention-window=0",
 		})
 	}()
 
@@ -689,6 +690,7 @@ func TestServe_StartsInSteadyStatePhase(t *testing.T) {
 			"--shutdown-timeout=5s",
 			"--relay-url=" + relay.URL,
 			"--data-dir=" + dataDir,
+			"--retention-window=0",
 		})
 	}()
 
@@ -765,6 +767,7 @@ func TestServe_AdvancesFromMergingToSteadyState(t *testing.T) {
 			"--shutdown-timeout=5s",
 			"--relay-url=" + relay.URL,
 			"--data-dir=" + dataDir,
+			"--retention-window=0",
 		})
 	}()
 

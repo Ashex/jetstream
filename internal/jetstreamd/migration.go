@@ -403,6 +403,9 @@ func (r *Runtime) buildInventory(reg prometheus.Registerer, cat *localcatalog.Ca
 			// never a reason to stop serving.
 			r.logger.Error("migration dry run failed", "err", err)
 		case err == nil:
+			if floor := r.retention.Floor(); floor.Pruned {
+				r.logger.Warn(fmt.Sprintf("migration dry run: this archive was pruned below segment %d; --migrate-to-disaggregated refuses it", floor.LastIndex+1))
+			}
 			r.logger.Info("migration dry run finished", "ready_to_migrate", inv.ReadyToMigrate,
 				"unclassified_keys", inv.UnclassifiedN, "seed_bytes", inv.SeedBytes, "seed_objects", inv.SeedObjects,
 				"vacancies", inv.VacancyCount, "took", inv.FinishedAt.Sub(inv.StartedAt))

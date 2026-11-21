@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/bluesky-social/jetstream/internal/jetstreamd"
 	"github.com/stretchr/testify/require"
@@ -64,4 +65,47 @@ func TestNorthskyFlags_LiveOnlyRefusesBackfillFlags(t *testing.T) {
 		require.ErrorContains(t, err, "--live-only", flag)
 		require.ErrorContains(t, err, flag, flag)
 	}
+}
+
+// nolint:paralleltest // mutates the process environment
+func TestNorthskyFlags_RetentionWindowDefaultsToNinetyDaysNotExplicit(t *testing.T) {
+	withClearedEnv(t)
+	opts, err := serveOptionsFor(t)
+	require.NoError(t, err)
+	require.Equal(t, 2160*time.Hour, opts.RetentionWindow)
+	require.False(t, opts.RetentionWindowExplicit)
+}
+
+// nolint:paralleltest // mutates the process environment
+func TestNorthskyFlags_RetentionWindowSetByFlagOrEnvIsExplicit(t *testing.T) {
+	withClearedEnv(t)
+	opts, err := serveOptionsFor(t, "--retention-window=48h")
+	require.NoError(t, err)
+	require.Equal(t, 48*time.Hour, opts.RetentionWindow)
+	require.True(t, opts.RetentionWindowExplicit)
+
+	t.Setenv("JETSTREAM_RETENTION_WINDOW", "0")
+	opts, err = serveOptionsFor(t)
+	require.NoError(t, err)
+	require.Zero(t, opts.RetentionWindow)
+	require.True(t, opts.RetentionWindowExplicit, "an env source counts as set")
+}
+
+// nolint:paralleltest // mutates the process environment
+func TestNorthskyFlags_RetentionWindowRefusals(t *testing.T) {
+	withClearedEnv(t)
+	disaggregated := []string{"--storage=disaggregated", "--pg-url=postgres://127.0.0.1/jetstream", "--s3-region=us-east-1", "--s3-bucket=b"}
+
+	_, err := serveOptionsFor(t, append(disaggregated, "--retention-window=48h")...)
+	require.ErrorContains(t, err, "--retention-window is local storage only")
+
+	opts, err := serveOptionsFor(t, disaggregated...)
+	require.NoError(t, err)
+	require.Zero(t, opts.RetentionWindow, "a defaulted window is off for disaggregated storage")
+	require.False(t, opts.RetentionWindowExplicit)
+
+	_, err = serveOptionsFor(t, "--migrate-to-disaggregated")
+	require.ErrorContains(t, err, "--retention-window=0 to migrate")
+	_, err = serveOptionsFor(t, "--migrate-to-disaggregated", "--retention-window=0")
+	require.NoError(t, err)
 }

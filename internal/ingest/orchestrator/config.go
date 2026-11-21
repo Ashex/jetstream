@@ -13,6 +13,7 @@ import (
 	"github.com/bluesky-social/jetstream/internal/ingest/live"
 	"github.com/bluesky-social/jetstream/internal/ingest/syncstate"
 	"github.com/bluesky-social/jetstream/internal/metastore"
+	"github.com/bluesky-social/jetstream/internal/retention"
 	"github.com/bluesky-social/jetstream/internal/tombstone"
 	"github.com/bluesky-social/jetstream/segment"
 	"github.com/cockroachdb/pebble/vfs"
@@ -127,6 +128,29 @@ type Config struct {
 	// effect on a data dir already in steady_state and is refused on one in
 	// bootstrap or merging. Local storage only.
 	LiveOnly bool
+
+	// RetentionWindow, when > 0, makes each steady compaction pass end by
+	// deleting sealed segments whose newest event is older than the window.
+	// 0 keeps everything. Local storage only.
+	RetentionWindow time.Duration
+
+	// RetentionWindowExplicit reports that the operator set the window. A
+	// defaulted window prunes only a data dir that was started live-only or
+	// already has a retention floor, and otherwise Run refuses to start.
+	RetentionWindowExplicit bool
+
+	// OnRetentionFloor, if non-nil, publishes a newly committed retention
+	// floor to the per-process readers before any segment is removed.
+	OnRetentionFloor func(retention.Floor)
+
+	// OnSegmentPruned, if non-nil, drops segment idx from the per-process
+	// readers (manifest, cold-reader block cache) before its file is unlinked.
+	OnSegmentPruned func(idx uint64) error
+
+	// WaitForArchiveLoad, if non-nil, blocks until the process's background
+	// loads of the segments directory (manifest, catalog) have finished. A
+	// removal that raced a load would be overwritten by it or fail it.
+	WaitForArchiveLoad func(ctx context.Context) error
 
 	// MaxBackfillRepos, when > 0, limits bootstrap to this many selected
 	// listRepos entries and then advances to the merge phase. Debug-only
@@ -353,6 +377,9 @@ func (c *Config) validate() error {
 	}
 	if c.Store == nil {
 		return fmt.Errorf("%w: Store is required", ErrInvalidConfig)
+	}
+	if c.RetentionWindow < 0 {
+		return fmt.Errorf("%w: RetentionWindow must be >= 0", ErrInvalidConfig)
 	}
 	if c.LiveOnly {
 		switch {

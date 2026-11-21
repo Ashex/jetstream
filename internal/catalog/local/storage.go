@@ -96,6 +96,38 @@ func (c *Catalog) DeleteNamespace(ns catalog.Namespace) error {
 	return nil
 }
 
+// RemoveSegmentFiles drops each sealed segment of ns from the catalog's list
+// and then unlinks its file; a file already gone is fine. A snapshot taken
+// before the call still names the segments, and fetching through it answers
+// ErrStaleRef. Call SyncSegmentsDir afterwards to make the unlinks durable.
+func (c *Catalog) RemoveSegmentFiles(ns catalog.Namespace, idxs []uint64) error {
+	if _, ok := c.dirs[ns]; !ok {
+		return fmt.Errorf("catalog/local: remove segments in namespace %q with no directory", ns)
+	}
+	c.mu.Lock()
+	for _, idx := range idxs {
+		c.dropSealedLocked(ns, idx)
+	}
+	c.mu.Unlock()
+	for _, idx := range idxs {
+		path := c.Path(ns, idx)
+		if err := c.fs.Remove(path); err != nil && !oserror.IsNotExist(err) {
+			return fmt.Errorf("catalog/local: remove segment %s: %w", path, err)
+		}
+	}
+	return nil
+}
+
+// SyncSegmentsDir fsyncs ns's segment directory so earlier unlinks survive a
+// power loss.
+func (c *Catalog) SyncSegmentsDir(ns catalog.Namespace) error {
+	dir, ok := c.dirs[ns]
+	if !ok {
+		return fmt.Errorf("catalog/local: sync namespace %q with no directory", ns)
+	}
+	return c.syncDir(dir)
+}
+
 func (c *Catalog) syncDir(path string) error {
 	dir, err := c.fs.OpenDir(path)
 	if err != nil {

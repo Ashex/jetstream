@@ -28,6 +28,7 @@ import (
 	"github.com/bluesky-social/jetstream/internal/migrate"
 	"github.com/bluesky-social/jetstream/internal/obs"
 	"github.com/bluesky-social/jetstream/internal/repoexport"
+	"github.com/bluesky-social/jetstream/internal/retention"
 	"github.com/bluesky-social/jetstream/internal/server"
 	"github.com/bluesky-social/jetstream/internal/status"
 	"github.com/bluesky-social/jetstream/internal/subscribe"
@@ -82,6 +83,8 @@ type Runtime struct {
 	// steadyWriterOpen reports whether a session's steady-state writer is
 	// open.
 	steadyWriterOpen func() bool
+	// retention is the process-wide retention floor every read surface checks.
+	retention *retention.Holder
 	// drained is set once this process handed its archive off: it serves
 	// archive reads and refuses subscribers.
 	drained atomic.Bool
@@ -177,6 +180,9 @@ func Build(ctx context.Context, opts Options) (*Runtime, error) {
 	if err := opts.Migration.validate(opts); err != nil {
 		return nil, err
 	}
+	if err := opts.validateRetention(); err != nil {
+		return nil, err
+	}
 
 	processLogger, err := obs.BuildLoggerFromStrings(opts.LogOutput, opts.LogLevel, opts.LogFormat)
 	if err != nil {
@@ -259,6 +265,17 @@ func Build(ctx context.Context, opts Options) (*Runtime, error) {
 	if err := rt.openMigrationGates(ctx); err != nil {
 		return fail(err)
 	}
+
+	retentionFloor, err := retention.Load(ctx, metaKV)
+	if err != nil {
+		return fail(fmt.Errorf("serve: %w", err))
+	}
+	if retentionFloor.Pruned && opts.Migration.Enabled {
+		return fail(errors.New("serve: --migrate-to-disaggregated refuses an archive that was pruned by the retention window: its segment indexes no longer start at 0"))
+	}
+	retentionHolder := &retention.Holder{}
+	retentionHolder.Raise(retentionFloor)
+	rt.retention = retentionHolder
 
 	manifestCtx, cancelManifest := context.WithCancel(ctx)
 	rt.cancelManifest = cancelManifest
@@ -387,6 +404,19 @@ func Build(ctx context.Context, opts Options) (*Runtime, error) {
 		coldRd.InvalidateSegment(idx)
 		return nil
 	}
+	onSegmentPruned := func(idx uint64) error {
+		if err := mft.RemoveSegment(idx); err != nil {
+			return err
+		}
+		coldRd.InvalidateSegment(idx)
+		return nil
+	}
+	waitForArchiveLoad := func(ctx context.Context) error {
+		if err := mft.Wait(ctx); err != nil {
+			return err
+		}
+		return catalogLoad.Wait(ctx)
+	}
 	onCompactionPass := func(result orchestrator.CompactionPassResult) {
 		if opts.OnCompactionPass != nil {
 			opts.OnCompactionPass(CompactionPassResult{Watermark: result.Watermark, Err: result.Err})
@@ -400,6 +430,7 @@ func Build(ctx context.Context, opts Options) (*Runtime, error) {
 		}
 	}
 	rt.orchMetrics = orchestrator.NewMetrics(metrics.Registry)
+	rt.orchMetrics.SetRetention(opts.RetentionWindow, retentionFloor)
 	rt.leaderMetrics = leader.NewMetrics(metrics.Registry)
 	// Store, Verifier, SyncStateStore, Tombstones, and CompactionSchedule are
 	// per-session; sessionFactory.build fills them in.
@@ -430,6 +461,11 @@ func Build(ctx context.Context, opts Options) (*Runtime, error) {
 			OnEvent:                        onSteadyStateEvent,
 			OnBootstrapLiveEvent:           opts.OnBootstrapLiveEvent,
 			LiveOnly:                       opts.LiveOnly,
+			RetentionWindow:                opts.RetentionWindow,
+			RetentionWindowExplicit:        opts.RetentionWindowExplicit,
+			OnRetentionFloor:               retentionHolder.Raise,
+			OnSegmentPruned:                onSegmentPruned,
+			WaitForArchiveLoad:             waitForArchiveLoad,
 			MaxBackfillRepos:               opts.MaxBackfillRepos,
 			BackfillGlobalDownloads:        opts.effectiveBackfillGlobalDownloads(),
 			BackfillHostWorkers:            opts.effectiveBackfillHostWorkers(),

@@ -31,6 +31,11 @@ type SegmentCatalog interface {
 	// RemoveStaleTemps reclaims what a crashed rewrite left behind in ns.
 	RemoveStaleTemps(ns catalog.Namespace) error
 
+	// RemoveSegmentFiles drops sealed segments from the catalog and unlinks
+	// their files; SyncSegmentsDir then makes the unlinks durable.
+	RemoveSegmentFiles(ns catalog.Namespace, idxs []uint64) error
+	SyncSegmentsDir(ns catalog.Namespace) error
+
 	// DeleteNamespace durably removes ns and everything in it. Idempotent.
 	DeleteNamespace(ns catalog.Namespace) error
 }

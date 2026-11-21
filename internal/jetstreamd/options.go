@@ -4,6 +4,8 @@ package jetstreamd
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -72,6 +74,13 @@ type Options struct {
 	ShutdownTimeout    time.Duration
 	ClientDrainTimeout time.Duration
 
+	// RetentionWindow, when > 0, deletes sealed segments whose newest event is
+	// older than the window at the end of each compaction pass. 0 keeps
+	// everything. Local storage only; see orchestrator.Config.RetentionWindow.
+	RetentionWindow time.Duration
+	// RetentionWindowExplicit reports that the operator set the window rather
+	// than taking the default.
+	RetentionWindowExplicit bool
 	// LiveOnly starts a fresh data dir at the relay's live tip with no
 	// bootstrap; see orchestrator.Config.LiveOnly.
 	LiveOnly                       bool
@@ -246,4 +255,21 @@ func (o Options) effectiveSubscribeReadLogRetentionBytes() int {
 		return o.SubscribeReadLogRetentionBytes
 	}
 	return int(ingest.DefaultReadLogRetentionBytes)
+}
+
+// validateRetention refuses window settings that cannot work: a window needs
+// compaction passes to run on, and the retention floor has no disaggregated
+// counterpart (a pruned archive cannot migrate there either).
+func (o Options) validateRetention() error {
+	switch {
+	case o.RetentionWindow < 0:
+		return fmt.Errorf("serve: --retention-window must be >= 0, got %s", o.RetentionWindow)
+	case o.RetentionWindow > 0 && o.CompactionInterval == 0:
+		return errors.New("serve: --retention-window needs compaction: --compaction-interval is 0")
+	case o.RetentionWindow > 0 && o.Storage.Disaggregated():
+		return errors.New("serve: --retention-window is local storage only; set --retention-window=0 with --storage=disaggregated")
+	case o.RetentionWindow > 0 && o.Migration.Enabled:
+		return errors.New("serve: --migrate-to-disaggregated cannot run with a retention window: set --retention-window=0 to migrate")
+	}
+	return nil
 }

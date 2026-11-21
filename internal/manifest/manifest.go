@@ -871,6 +871,34 @@ func (m *Manifest) SegmentChecksums() map[uint64]uint64 {
 	return out
 }
 
+// RemoveSegment forgets sealed segment idx: the retention prune's first step,
+// taken after the retention floor is durable and before the file is unlinked.
+// It waits for the initial load like ApplySegment does, because a removal that
+// lands first would be overwritten when the load assigns its segment set.
+// Removing an absent segment is a no-op.
+func (m *Manifest) RemoveSegment(idx uint64) error {
+	if err := m.waitReady(); err != nil {
+		return err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	i := sort.Search(len(m.segments), func(i int) bool {
+		return m.segments[i].Idx >= idx
+	})
+	if i == len(m.segments) || m.segments[i].Idx != idx {
+		return nil
+	}
+	next := make([]SegmentMetadata, 0, len(m.segments)-1)
+	next = append(next, m.segments[:i]...)
+	next = append(next, m.segments[i+1:]...)
+	m.segments = next
+	m.generation++
+	if m.opts.Metrics != nil {
+		m.opts.Metrics.SegmentsLoaded.Set(float64(len(m.segments)))
+	}
+	return nil
+}
+
 func (m *Manifest) commitSegment(meta SegmentMetadata, start time.Time) error {
 	idx := meta.Idx
 	m.mu.Lock()

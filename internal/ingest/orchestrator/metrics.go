@@ -66,6 +66,8 @@ type Metrics struct {
 	CompactionBlocksFetched     prometheus.Counter
 	CompactionDenseRewrites     prometheus.Counter
 
+	retention retentionMetrics
+
 	// tombstones is the set the tombstone gauges read. Metrics live for the
 	// process but each writer session builds its own set.
 	tombstones atomic.Pointer[tombstone.Set]
@@ -230,6 +232,7 @@ func NewMetrics(reg prometheus.Registerer, tombstones ...*tombstone.Set) *Metric
 		Name: "dense_rewrites_total",
 		Help: "Disaggregated segment rewrites that hit the sparse probe limit and read every block below the highest tombstone seq.",
 	})
+	m.retention = newRetentionMetrics()
 	reg.MustRegister(
 		m.Phase,
 		m.PhaseTransitions,
@@ -260,6 +263,7 @@ func NewMetrics(reg prometheus.Registerer, tombstones ...*tombstone.Set) *Metric
 		m.CompactionBlocksFetched,
 		m.CompactionDenseRewrites,
 	)
+	m.retention.register(reg)
 	if len(tombstones) > 0 {
 		m.SetTombstones(tombstones[0])
 	}

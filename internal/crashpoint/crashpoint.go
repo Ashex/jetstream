@@ -186,6 +186,17 @@ const (
 	// AfterMigrationDone fires once migration/state done commits (H6),
 	// before the local guard says done.
 	AfterMigrationDone Point = "after-migration-done"
+
+	// AfterRetentionFloorBeforeRemove fires once the retention floor is
+	// durable but before any pruned segment leaves the manifest, the catalog
+	// or the disk. Recovery at the next session start removes every segment
+	// at or below the floor's last index.
+	AfterRetentionFloorBeforeRemove Point = "after-retention-floor-before-remove"
+
+	// AfterRetentionRemoveBeforeDirSync fires after pruned segments are
+	// unlinked but before the segments directory is fsynced. A power loss
+	// here can resurrect the files; recovery removes them again.
+	AfterRetentionRemoveBeforeDirSync Point = "after-retention-remove-before-dir-sync"
 )
 
 // AllPoints is the single source of truth for the set of declared
@@ -226,6 +237,8 @@ var AllPoints = []Point{
 	AfterMigrationFinalShip,
 	AfterMigrationGuardPending,
 	AfterMigrationDone,
+	AfterRetentionFloorBeforeRemove,
+	AfterRetentionRemoveBeforeDirSync,
 }
 
 var knownPoints = func() map[Point]struct{} {

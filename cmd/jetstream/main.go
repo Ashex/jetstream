@@ -698,6 +698,12 @@ func serveOptionsFromCommand(cmd *cli.Command) (jetstreamd.Options, error) {
 		return jetstreamd.Options{}, err
 	}
 
+	migration := migrationConfigFromCommand(cmd)
+	retentionWindow, retentionExplicit, err := retentionWindowFromCommand(cmd, storage.Disaggregated(), migration.Enabled)
+	if err != nil {
+		return jetstreamd.Options{}, err
+	}
+
 	skipMergeDiscovery := cmd.Bool("skip-merge-discovery")
 	if maxBackfillRepos > 0 || len(backfillRepos) > 0 {
 		skipMergeDiscovery = true
@@ -708,7 +714,9 @@ func serveOptionsFromCommand(cmd *cli.Command) (jetstreamd.Options, error) {
 		DebugAddr:                      cmd.String("debug-addr"),
 		DataDir:                        dataDir,
 		Storage:                        storage,
-		Migration:                      migrationConfigFromCommand(cmd),
+		Migration:                      migration,
+		RetentionWindow:                retentionWindow,
+		RetentionWindowExplicit:        retentionExplicit,
 		RelayURL:                       cmd.String("relay-url"),
 		PLCURL:                         cmd.String("plc-url"),
 		OTelServiceName:                cmd.String("otel-service-name"),

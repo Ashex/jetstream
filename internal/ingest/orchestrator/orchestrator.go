@@ -57,6 +57,9 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("orchestrator: read phase: %w", err)
 		}
+		if err := o.checkRetentionAllowed(ctx, phase, time.Now()); err != nil {
+			return err
+		}
 		if phase == "" && o.cfg.LiveOnly {
 			if err := o.startLiveOnly(ctx); err != nil {
 				return err

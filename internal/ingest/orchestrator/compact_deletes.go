@@ -555,6 +555,9 @@ func defaultCompactionRewriteWorkers() int {
 const defaultDisaggCompactionRewriteWorkers = 32
 
 func (o *Orchestrator) runSteadyCompactor(ctx context.Context, liveWriter *ingest.Writer) error {
+	if err := o.recoverRetention(ctx); err != nil {
+		return err
+	}
 	if o.cfg.CompactionInterval == 0 {
 		if err := o.setCompactionSchedule(ctx, time.Time{}); err != nil {
 			return err
@@ -586,6 +589,9 @@ func (o *Orchestrator) runSteadyCompactor(ctx context.Context, liveWriter *inges
 			return o.setCompactionSchedule(ctx, time.Time{})
 		}
 		err := o.runDeleteCompaction(ctx, compactionSteady, liveWriter)
+		if err == nil && o.cfg.RetentionWindow > 0 {
+			err = o.runRetentionPass(ctx, time.Now())
+		}
 		o.cfg.CompactionGate.exit()
 		completed := time.Now()
 		if o.cfg.Disaggregated != nil && compactionPassFatal(err) {
