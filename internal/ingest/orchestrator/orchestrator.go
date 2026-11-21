@@ -57,7 +57,12 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("orchestrator: read phase: %w", err)
 		}
-		if phase == "" {
+		if phase == "" && o.cfg.LiveOnly {
+			if err := o.startLiveOnly(ctx); err != nil {
+				return err
+			}
+			phase = lifecycle.PhaseSteadyState
+		} else if phase == "" {
 			phase = lifecycle.PhaseBootstrap
 			if o.cfg.Disaggregated != nil {
 				if err := o.writeInitialPhaseDisaggregated(ctx, time.Now().UTC()); err != nil {
@@ -66,6 +71,8 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 			} else if err := lifecycle.WritePhase(ctx, o.cfg.Store, phase, time.Now().UTC()); err != nil {
 				return fmt.Errorf("orchestrator: write initial phase: %w", err)
 			}
+		} else if o.cfg.LiveOnly && phase != lifecycle.PhaseSteadyState {
+			return fmt.Errorf("orchestrator: live-only start needs a fresh data dir or one in steady_state, this one is in %q", phase)
 		}
 
 		mode := "local"

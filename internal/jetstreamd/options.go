@@ -72,6 +72,9 @@ type Options struct {
 	ShutdownTimeout    time.Duration
 	ClientDrainTimeout time.Duration
 
+	// LiveOnly starts a fresh data dir at the relay's live tip with no
+	// bootstrap; see orchestrator.Config.LiveOnly.
+	LiveOnly                       bool
 	MaxBackfillRepos               int
 	BackfillGlobalDownloads        int
 	BackfillHostWorkers            int

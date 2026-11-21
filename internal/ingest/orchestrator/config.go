@@ -122,6 +122,12 @@ type Config struct {
 	// production leaves it nil so bootstrap events are not user-visible.
 	OnBootstrapLiveEvent func(*segment.Event)
 
+	// LiveOnly starts a fresh data dir in steady_state at the relay's live
+	// tip: no listHosts/listRepos/getRepo bootstrap and no merge. It has no
+	// effect on a data dir already in steady_state and is refused on one in
+	// bootstrap or merging. Local storage only.
+	LiveOnly bool
+
 	// MaxBackfillRepos, when > 0, limits bootstrap to this many selected
 	// listRepos entries and then advances to the merge phase. Debug-only
 	// knob for fast local-dev iteration against a relay with millions of
@@ -347,6 +353,14 @@ func (c *Config) validate() error {
 	}
 	if c.Store == nil {
 		return fmt.Errorf("%w: Store is required", ErrInvalidConfig)
+	}
+	if c.LiveOnly {
+		switch {
+		case c.Disaggregated != nil:
+			return fmt.Errorf("%w: LiveOnly is local storage only", ErrInvalidConfig)
+		case c.MaxBackfillRepos > 0 || len(c.BackfillRepos) > 0:
+			return fmt.Errorf("%w: LiveOnly runs no backfill, so MaxBackfillRepos and BackfillRepos must be unset", ErrInvalidConfig)
+		}
 	}
 	if c.RelayURL == "" {
 		return fmt.Errorf("%w: RelayURL is required", ErrInvalidConfig)

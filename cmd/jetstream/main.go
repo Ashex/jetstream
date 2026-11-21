@@ -423,6 +423,7 @@ func serveCommand() *cli.Command {
 		Action: runServe,
 	}
 	cmd.Flags = append(cmd.Flags, storageFlags()...)
+	cmd.Flags = append(cmd.Flags, northskyServeFlags()...)
 	cmd.Flags = append(cmd.Flags, migrationFlags()...)
 	return cmd
 }
@@ -687,6 +688,10 @@ func serveOptionsFromCommand(cmd *cli.Command) (jetstreamd.Options, error) {
 	if len(backfillRepos) > 0 && maxBackfillRepos > 0 {
 		return jetstreamd.Options{}, fmt.Errorf("serve: --backfill-repos cannot be combined with --max-backfill-repos")
 	}
+	liveOnly := cmd.Bool("live-only")
+	if liveOnly && (len(backfillRepos) > 0 || maxBackfillRepos > 0) {
+		return jetstreamd.Options{}, fmt.Errorf("serve: --live-only runs no backfill and cannot be combined with --backfill-repos or --max-backfill-repos")
+	}
 
 	storage, dataDir, err := storageConfigFromCommand(cmd)
 	if err != nil {
@@ -712,6 +717,7 @@ func serveOptionsFromCommand(cmd *cli.Command) (jetstreamd.Options, error) {
 		LogOutput:                      cmd.Root().ErrWriter,
 		ShutdownTimeout:                cmd.Duration("shutdown-timeout"),
 		ClientDrainTimeout:             cmd.Duration("client-drain-timeout"),
+		LiveOnly:                       liveOnly,
 		MaxBackfillRepos:               maxBackfillRepos,
 		BackfillWorkers:                cmd.Int("backfill-workers"),
 		BackfillGlobalDownloads:        cmd.Int("backfill-global-downloads"),

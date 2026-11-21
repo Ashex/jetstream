@@ -216,6 +216,9 @@ func openBackend(ctx context.Context, cfg StorageConfig, pgMetrics *pgstore.Metr
 // loop start in Run.
 func buildDisaggregated(ctx context.Context, opts Options, processLogger, logger *slog.Logger) (*Runtime, error) {
 	st := opts.Storage
+	if opts.LiveOnly {
+		return nil, fmt.Errorf("serve: --live-only is local storage only; it cannot be combined with --storage=disaggregated")
+	}
 	// Logged whole, redacted, so the operator sees what the pod will use
 	// even when a check below refuses it.
 	logger.Info("storage config", "storage", st)

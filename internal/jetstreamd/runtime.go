@@ -429,6 +429,7 @@ func Build(ctx context.Context, opts Options) (*Runtime, error) {
 			SegmentMetrics:                 segmentMetrics,
 			OnEvent:                        onSteadyStateEvent,
 			OnBootstrapLiveEvent:           opts.OnBootstrapLiveEvent,
+			LiveOnly:                       opts.LiveOnly,
 			MaxBackfillRepos:               opts.MaxBackfillRepos,
 			BackfillGlobalDownloads:        opts.effectiveBackfillGlobalDownloads(),
 			BackfillHostWorkers:            opts.effectiveBackfillHostWorkers(),
