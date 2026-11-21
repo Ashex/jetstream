@@ -10,6 +10,7 @@ import (
 
 	"github.com/bluesky-social/jetstream/internal/catalog"
 	"github.com/bluesky-social/jetstream/internal/manifest"
+	"github.com/bluesky-social/jetstream/internal/retention"
 	"github.com/bluesky-social/jetstream/internal/seqspace"
 )
 
@@ -136,6 +137,11 @@ type CursorEnv struct {
 	// both endpoints.
 	RejectBelowFloor bool
 
+	// RetentionFloor is the archive's pruning floor. Zero Seq means nothing
+	// was pruned. Unlike the lookback floor it is a hard fact: the seqs below
+	// it are gone.
+	RetentionFloor retention.Floor
+
 	// Gaps is the immutable set of durable, explicitly-authorized vacancies.
 	Gaps *seqspace.Gaps
 
@@ -158,6 +164,12 @@ var ErrInvalidCursor = errors.New("subscribe: invalid cursor")
 // requested seq and the floor seq so the client can re-backfill from its
 // last seq. v1 never returns this (it clamps instead).
 var ErrCursorTooOld = errors.New("subscribe: cursor too old")
+
+// ErrBelowRetention is ErrCursorTooOld for a cursor below the retention
+// floor: the archive pruned those seqs. It is returned under RejectBelowFloor
+// (v2) and wraps ErrCursorTooOld, so the pre-upgrade 400 CursorTooOld mapping
+// applies; the handler counts it separately.
+var ErrBelowRetention = fmt.Errorf("%w: below the retention floor", ErrCursorTooOld)
 
 // ErrCursorResolveFailed marks a SERVER-side failure while resolving a
 // well-formed cursor — a segment read/decode/index-load fault during
@@ -231,6 +243,13 @@ func ResolveCursor(raw string, env CursorEnv) (CursorPlan, error) {
 			plan.Clamped = true
 			plan.ClampReason = "gap"
 		}
+		if f := env.RetentionFloor.Seq; f > 0 && startSeq < f {
+			if env.RejectBelowFloor {
+				return CursorPlan{}, fmt.Errorf("%w: cursor %d is below the retention floor %d; this archive no longer holds it", ErrBelowRetention, n, f)
+			}
+			startSeq = f
+			plan.Clamped = true
+		}
 		// Clamp to the lookback floor when the manifest knows the floor
 		// and lookback clamping is enabled. A zero or negative Lookback
 		// disables clamping (replays as far back as the manifest can).
@@ -291,6 +310,16 @@ func ResolveCursor(raw string, env CursorEnv) (CursorPlan, error) {
 		plan.StartSeq = end
 		plan.Clamped = true
 		plan.ClampReason = "gap"
+	}
+	if f := env.RetentionFloor.Seq; f > 0 {
+		if plan.StartSeq < f {
+			plan.StartSeq = f
+			plan.Clamped = true
+			plan.Notice = NoticeBelowRetention
+		}
+		if plan.Notice == NoticeBeforeArchive {
+			plan.Notice = NoticeBelowRetention
+		}
 	}
 	// Apply lookback floor on top of translation. The floor is in
 	// seq units; if the translated seq is below it, we clamp.

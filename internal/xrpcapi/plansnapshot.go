@@ -11,6 +11,7 @@ import (
 	"github.com/bluesky-social/jetstream/api/jetstream"
 	"github.com/bluesky-social/jetstream/internal/ingest"
 	"github.com/bluesky-social/jetstream/internal/manifest"
+	"github.com/bluesky-social/jetstream/internal/retention"
 	"github.com/jcalabro/atmos"
 	"github.com/jcalabro/atmos/xrpc"
 	"github.com/jcalabro/atmos/xrpcserver"
@@ -66,7 +67,7 @@ func (c PlanConfig) validate() error {
 	return nil
 }
 
-func newPlanSnapshotHandler(src SegmentSource, cfg PlanConfig, syncer SeqSyncer) xrpcserver.Handler {
+func newPlanSnapshotHandler(src SegmentSource, cfg PlanConfig, syncer SeqSyncer, floorSource retention.Source, metrics *Metrics) xrpcserver.Handler {
 	cfg = cfg.withDefaults()
 	// Validate once at construction rather than per request. runtime.Build
 	// already validates these limits at startup, so a non-nil cfgErr only
@@ -80,6 +81,13 @@ func newPlanSnapshotHandler(src SegmentSource, cfg PlanConfig, syncer SeqSyncer)
 		req, err := planRequestFromInput(input, cfg)
 		if err != nil {
 			return nil, err
+		}
+		if floorSource != nil {
+			if f := floorSource.Floor().Seq; f > 0 && (!req.HasAfterSeq || req.AfterSeq+1 < f) {
+				metrics.incBelowRetention()
+				return nil, &xrpc.Error{StatusCode: http.StatusBadRequest, Name: "CursorTooOld",
+					Message: fmt.Sprintf("afterSeq %d is below the retention floor %d: this archive no longer holds seqs below %d; plan from afterSeq=%d", req.AfterSeq, f, f, f-1)}
+			}
 		}
 		if syncer != nil {
 			if seq, ok := planSyncSeq(req); ok {

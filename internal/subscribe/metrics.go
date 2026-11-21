@@ -74,7 +74,7 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 		Disconnects: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Namespace: metricsNamespace, Subsystem: metricsSubsystem,
 			Name: "disconnects_total",
-			Help: "Number of streaming /subscribe connections the server ended, by reason: write_timeout (a frame did not drain within the write timeout), write_error, ping_failed, consumer_too_slow, store_unavailable, read_error, stalled_cursor. Client closes and shutdown are clean_disconnects_total.",
+			Help: "Number of streaming /subscribe connections the server ended, by reason: write_timeout (a frame did not drain within the write timeout), write_error, ping_failed, consumer_too_slow, store_unavailable, read_error, stalled_cursor, below_retention. Client closes and shutdown are clean_disconnects_total.",
 		}, []string{"reason"}),
 		EventsSent: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Namespace: metricsNamespace, Subsystem: metricsSubsystem,
@@ -205,12 +205,13 @@ const (
 	disconnectStoreUnavailable = "store_unavailable"
 	disconnectReadError        = "read_error"
 	disconnectStalledCursor    = "stalled_cursor"
+	disconnectBelowRetention   = "below_retention"
 )
 
 var disconnectReasons = []string{
 	disconnectWriteTimeout, disconnectWriteError, disconnectPingFailed,
 	disconnectConsumerTooSlow, disconnectStoreUnavailable, disconnectReadError,
-	disconnectStalledCursor,
+	disconnectStalledCursor, disconnectBelowRetention,
 }
 
 func (m *Metrics) incDisconnect(reason string) {

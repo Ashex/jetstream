@@ -15,6 +15,7 @@ import (
 	"github.com/bluesky-social/jetstream/internal/lifecycle"
 	"github.com/bluesky-social/jetstream/internal/manifest"
 	"github.com/bluesky-social/jetstream/internal/objstore"
+	"github.com/bluesky-social/jetstream/internal/retention"
 	"github.com/jcalabro/atmos/xrpc"
 	"github.com/jcalabro/atmos/xrpcserver"
 	"go.opentelemetry.io/otel/trace"
@@ -92,6 +93,10 @@ type Config struct {
 	Tracer               trace.Tracer
 	MaxResponseDuration  time.Duration
 	Sync                 SeqSyncer
+	// Retention, when non-nil, is the archive's pruning floor; planSnapshot
+	// refuses to plan below it rather than silently start at the oldest
+	// retained segment.
+	Retention retention.Source
 
 	// Dictionary is the v2 subscribe compression dictionary served by
 	// getZstdDictionary. Empty Bytes leaves the endpoint unregistered.
@@ -119,7 +124,7 @@ func New(cfg Config) *Server {
 		metrics: cfg.Metrics, tracer: cfg.Tracer,
 	}))
 	s.xrpc.HandleQuery("network.bsky.jetstream.listSegments", withReady(cfg.Ready, newListSegmentsHandler(cfg.Src)))
-	s.xrpc.HandleProcedure("network.bsky.jetstream.planSnapshot", withReady(cfg.Ready, newPlanSnapshotHandler(cfg.Src, cfg.Plan, cfg.Sync)))
+	s.xrpc.HandleProcedure("network.bsky.jetstream.planSnapshot", withReady(cfg.Ready, newPlanSnapshotHandler(cfg.Src, cfg.Plan, cfg.Sync, cfg.Retention, cfg.Metrics)))
 
 	// The v2 subscribe compression dictionary. Deliberately NOT behind the
 	// readiness gate: the artifact is compiled in and immutable, and a

@@ -21,6 +21,8 @@ type Metrics struct {
 	requests   *prometheus.CounterVec
 	servedByte prometheus.Counter
 	duration   prometheus.Histogram
+
+	belowRetention prometheus.Counter
 }
 
 // NewMetrics registers and returns the getBlock metrics on reg.
@@ -40,7 +42,11 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 			Buckets: prometheus.ExponentialBuckets(0.0001, 2, 12),
 		}),
 	}
-	reg.MustRegister(m.requests, m.servedByte, m.duration)
+	m.belowRetention = prometheus.NewCounter(prometheus.CounterOpts{
+		Namespace: metricsNamespace, Subsystem: "plansnapshot",
+		Name: "below_retention_total", Help: "planSnapshot requests refused because afterSeq is below the retention floor.",
+	})
+	reg.MustRegister(m.requests, m.servedByte, m.duration, m.belowRetention)
 	return m
 }
 
@@ -54,4 +60,10 @@ func (m *Metrics) observeServe(result string, bytes int, seconds float64) {
 		m.servedByte.Add(float64(bytes))
 	}
 	m.duration.Observe(seconds)
+}
+
+func (m *Metrics) incBelowRetention() {
+	if m != nil {
+		m.belowRetention.Inc()
+	}
 }

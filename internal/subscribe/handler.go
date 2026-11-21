@@ -25,6 +25,7 @@ import (
 	"github.com/bluesky-social/jetstream/internal/manifest"
 	"github.com/bluesky-social/jetstream/internal/metastore"
 	"github.com/bluesky-social/jetstream/internal/objstore"
+	"github.com/bluesky-social/jetstream/internal/retention"
 	"github.com/bluesky-social/jetstream/internal/seqspace"
 	"github.com/bluesky-social/jetstream/segment"
 	"github.com/coder/websocket"
@@ -74,6 +75,10 @@ type Subscription struct {
 	// Lookback is the cursor-replay clamp duration. Zero disables
 	// cursor replay entirely (cursors are silently dropped to live).
 	Lookback time.Duration
+
+	// Retention, when non-nil, is the archive's pruning floor: seqs below it
+	// are gone, so a cursor below it is refused (v2) or clamped to it (v1).
+	Retention retention.Source
 
 	// V2 selects the subscribeEvents contract: xrpc.v1.json framing and
 	// subprotocol, kinds/dids/collections filters, XRPC errors, and
@@ -148,6 +153,14 @@ func NewHandler(deps Subscription) http.Handler {
 // envelope ({"error": name, "message": msg}) on the v2 endpoint, where
 // clients match the structured error name instead of substring-scraping
 // the body.
+// retentionFloor is the current pruning floor; zero when no source is wired.
+func (s Subscription) retentionFloor() retention.Floor {
+	if s.Retention == nil {
+		return retention.Floor{}
+	}
+	return s.Retention.Floor()
+}
+
 func httpError(w http.ResponseWriter, deps Subscription, status int, name, msg string) {
 	if !deps.V2 {
 		http.Error(w, msg, status)
@@ -325,6 +338,7 @@ func serve(w http.ResponseWriter, r *http.Request, deps Subscription, logger *sl
 			Gaps:             seqs.SeqGaps(),
 			Lookback:         deps.Lookback,
 			RejectBelowFloor: deps.V2,
+			RetentionFloor:   deps.retentionFloor(),
 			ActiveTimeFloor:  seqs.ActiveTimeFloorSeq,
 		})
 		deps.Metrics.observeCursorResolveSeconds(time.Since(resolveStart).Seconds())
@@ -340,6 +354,10 @@ func serve(w http.ResponseWriter, r *http.Request, deps Subscription, logger *sl
 				logger.Error("cursor resolution failed", "err", err, "raw_cursor", rawCursor)
 				deps.Metrics.incCursorRequests("resolve_failed")
 				httpError(w, deps, http.StatusServiceUnavailable, "ServiceUnavailable", "service not ready: cursor resolution failed")
+				return
+			case errors.Is(err, ErrBelowRetention):
+				deps.Metrics.incCursorRequests("retention_too_old")
+				httpError(w, deps, http.StatusBadRequest, "CursorTooOld", err.Error())
 				return
 			case errors.Is(err, ErrCursorTooOld):
 				// A too-old v2 seq cursor is a distinct, expected signal (the
@@ -701,6 +719,11 @@ func runSubscriberLoop(
 				// connection.
 				deps.Metrics.incDisconnect(disconnectStoreUnavailable)
 				sendError("InternalError", "archive storage unavailable; reconnect later")
+				return
+			}
+			if errors.Is(err, ErrBelowRetention) {
+				deps.Metrics.incDisconnect(disconnectBelowRetention)
+				sendError("InternalError", fmt.Sprintf("cursor %d fell below the retention floor %d; reconnect", cursor, deps.retentionFloor().Seq))
 				return
 			}
 			deps.Metrics.incDisconnect(disconnectReadError)

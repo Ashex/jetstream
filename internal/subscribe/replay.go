@@ -8,6 +8,7 @@ import (
 
 	"github.com/bluesky-social/jetstream/internal/catalog"
 	"github.com/bluesky-social/jetstream/internal/ingest"
+	"github.com/bluesky-social/jetstream/internal/retention"
 	"github.com/bluesky-social/jetstream/internal/seqspace"
 	"github.com/bluesky-social/jetstream/segment"
 )
@@ -262,6 +263,10 @@ type ColdReaderConfig struct {
 	Keyer           BlockKeyer
 	BlockCacheBytes int // 0 -> DefaultBlockCacheBytes
 	Metrics         *Metrics
+	// Retention, when non-nil, is the archive's pruning floor. A read from a
+	// cursor below it fails with ErrBelowRetention instead of walking a
+	// pruned archive.
+	Retention retention.Source
 }
 
 // errBatchFull is the sentinel the bounded collector returns to stop the
@@ -279,6 +284,7 @@ type ColdReader struct {
 	gaps      func() *seqspace.Gaps
 	cache     *blockCache
 	metrics   *Metrics
+	retention retention.Source
 }
 
 // NewColdReader returns a ColdReader that serves bounded batches from the
@@ -301,6 +307,7 @@ func NewColdReader(cfg ColdReaderConfig) *ColdReader {
 		gaps:      cfg.Gaps,
 		cache:     cache,
 		metrics:   cfg.Metrics,
+		retention: cfg.Retention,
 	}
 }
 
@@ -352,6 +359,9 @@ func (r *ColdReader) Read(ctx context.Context, cursor uint64, max int) ([]*Entry
 	if !ok {
 		return nil, cursor, errColdUnavailable
 	}
+	if err := r.checkRetention(cursor); err != nil {
+		return nil, cursor, err
+	}
 	batch := make([]*Entry, 0, max)
 	next := cursor
 	var onGapJump func(start, end uint64)
@@ -381,6 +391,12 @@ func (r *ColdReader) Read(ctx context.Context, cursor uint64, max int) ([]*Entry
 		}
 		return nil
 	})
+	// Checked whatever the walk returned: a file unlinked under the walk
+	// surfaces as an unregistered-hole error, and a walk that jumped the hole
+	// returns none. Both mean the floor overtook this reader.
+	if rerr := r.checkRetention(cursor); rerr != nil {
+		return nil, cursor, rerr
+	}
 	if err != nil && !errors.Is(err, errBatchFull) {
 		return nil, cursor, err
 	}
@@ -388,4 +404,16 @@ func (r *ColdReader) Read(ctx context.Context, cursor uint64, max int) ([]*Entry
 		next = floor
 	}
 	return batch, next, nil
+}
+
+// checkRetention fails with ErrBelowRetention when the retention floor is
+// above cursor.
+func (r *ColdReader) checkRetention(cursor uint64) error {
+	if r.retention == nil {
+		return nil
+	}
+	if f := r.retention.Floor().Seq; f > 0 && cursor < f {
+		return fmt.Errorf("%w: cursor %d, floor %d", ErrBelowRetention, cursor, f)
+	}
+	return nil
 }

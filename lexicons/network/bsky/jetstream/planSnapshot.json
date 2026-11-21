@@ -64,7 +64,13 @@
             "stats": { "type": "ref", "ref": "#stats" }
           }
         }
-      }
+      },
+      "errors": [
+        {
+          "name": "CursorTooOld",
+          "description": "afterSeq is below the retention floor: the seqs between afterSeq and the floor were pruned and are no longer held. The message carries the floor seq."
+        }
+      ]
     },
     "segment": {
       "type": "object",

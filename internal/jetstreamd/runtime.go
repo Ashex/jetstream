@@ -362,6 +362,7 @@ func Build(ctx context.Context, opts Options) (*Runtime, error) {
 		WriterRef:       writerPtr,
 		BlockCacheBytes: opts.SubscribeBlockCacheBytes,
 		Metrics:         subscribeMetrics,
+		Retention:       retentionHolder,
 	})
 	tail, err := subscribe.New(subscribe.Config{
 		Logger:      processLogger,
@@ -577,6 +578,7 @@ func Build(ctx context.Context, opts Options) (*Runtime, error) {
 		Logger:    processLogger,
 		Metrics:   subscribeMetrics,
 		Lookback:  opts.CursorLookback,
+		Retention: retentionHolder,
 	}))
 	// The v2 stream serves at its lexicon-canonical XRPC path (proposal
 	// 0015; #318). The Go 1.22 mux prefers this exact pattern over the
@@ -592,6 +594,7 @@ func Build(ctx context.Context, opts Options) (*Runtime, error) {
 		Logger:    processLogger,
 		Metrics:   subscribeMetrics,
 		Lookback:  opts.CursorLookback,
+		Retention: retentionHolder,
 		V2:        true,
 	}))
 
@@ -611,6 +614,7 @@ func Build(ctx context.Context, opts Options) (*Runtime, error) {
 		})),
 		CompactionCacheGrace: opts.CompactionCacheGrace,
 		CompactionDeadline:   deadline,
+		Retention:            retentionHolder,
 		Plan: xrpcapi.PlanConfig{
 			MaxDIDs:               opts.PlanMaxDIDs,
 			MaxCollections:        opts.PlanMaxCollections,

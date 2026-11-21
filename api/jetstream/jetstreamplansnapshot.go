@@ -239,6 +239,11 @@ func (s *JetstreamPlanSnapshot_BlockRange) UnmarshalJSONAt(data []byte, pos int)
 	}
 }
 
+// Error name constants for JetstreamPlanSnapshot.
+const (
+	ErrJetstreamPlanSnapshot_CursorTooOld = "CursorTooOld" // afterSeq is below the retention floor: the seqs between afterSeq and the floor were pruned and ar...
+)
+
 // Precomputed JSON key tokens for JetstreamPlanSnapshot_Output.
 var (
 	jsonKey_JetstreamPlanSnapshot_Output_dollar_type       = []byte("\"$type\":")
