@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/bluesky-social/gttp"
+	"github.com/bluesky-social/jetstream/internal/archivecache"
 	"github.com/bluesky-social/jetstream/internal/catalog"
 	localcatalog "github.com/bluesky-social/jetstream/internal/catalog/local"
 	identcache "github.com/bluesky-social/jetstream/internal/identity"
@@ -99,6 +100,9 @@ type Runtime struct {
 // Build constructs the production service graph without starting listeners or
 // ingestion. Call Run to drive the graph, then Close during shutdown.
 func Build(ctx context.Context, opts Options) (*Runtime, error) {
+	if opts.ResyncInMemory && opts.ResyncScratchBytes > 0 {
+		return nil, errors.New("serve: --resync-scratch-bytes must be zero with --resync-store=memory")
+	}
 	if opts.CompactionInterval < 0 {
 		return nil, fmt.Errorf("serve: --compaction-interval must be >= 0 (CompactionInterval must be >= 0), got %s", opts.CompactionInterval)
 	}
@@ -277,11 +281,12 @@ func Build(ctx context.Context, opts Options) (*Runtime, error) {
 	retentionHolder.Raise(retentionFloor)
 	rt.retention = retentionHolder
 
+	archiveFS := archivecache.ReadFS(opts.StorageFS, opts.DropArchiveReadCache)
 	manifestCtx, cancelManifest := context.WithCancel(ctx)
 	rt.cancelManifest = cancelManifest
 	mft, err := manifest.OpenBackground(manifestCtx, manifest.Options{
 		SegmentsDir:         segmentsDir,
-		FS:                  opts.StorageFS,
+		FS:                  archiveFS,
 		BlockIndexCacheSize: opts.CursorBlockIndexCacheSize,
 		Logger:              processLogger,
 		Metrics:             manifestMetrics,
@@ -294,7 +299,7 @@ func Build(ctx context.Context, opts Options) (*Runtime, error) {
 	// The local catalog hears about every seal from the ingest writers and
 	// feeds main-namespace seals to the manifest.
 	segCatalog, err := localcatalog.New(localcatalog.Config{
-		FS: opts.StorageFS,
+		FS: archiveFS,
 		Dirs: map[catalog.Namespace]string{
 			catalog.Main:          segmentsDir,
 			catalog.BootstrapLive: filepath.Join(opts.DataDir, "backfill", "live_segments"),
@@ -306,7 +311,7 @@ func Build(ctx context.Context, opts Options) (*Runtime, error) {
 		return fail(fmt.Errorf("serve: build segment catalog: %w", err))
 	}
 	segCatalog.OnSealed(catalog.Main, func(v catalog.SegmentView, path string) error {
-		return manifest.ApplySegmentFile(mft, opts.StorageFS, v.Index, path)
+		return manifest.ApplySegmentFile(mft, archiveFS, v.Index, path)
 	})
 	// Like the manifest, the catalog loads what is on disk in the
 	// background. Writers may publish seals meanwhile; Refresh keeps them.
@@ -396,7 +401,7 @@ func Build(ctx context.Context, opts Options) (*Runtime, error) {
 		}
 	}
 	onSegmentCompacted := func(idx uint64, path string) error {
-		if err := manifest.ApplySegmentFile(mft, opts.StorageFS, idx, path); err != nil {
+		if err := manifest.ApplySegmentFile(mft, archiveFS, idx, path); err != nil {
 			return err
 		}
 		if err := segCatalog.Reload(catalog.Main, idx); err != nil {
@@ -436,16 +441,18 @@ func Build(ctx context.Context, opts Options) (*Runtime, error) {
 	// Store, Verifier, SyncStateStore, Tombstones, and CompactionSchedule are
 	// per-session; sessionFactory.build fills them in.
 	rt.sessions = &sessionFactory{
-		store:            metaKV,
-		directory:        directory,
-		syncClient:       syncClient,
-		verifierMetrics:  verifierMetrics,
-		logger:           processLogger,
-		resyncInterval:   opts.effectiveResyncInterval(),
-		unlimitedResyncs: opts.UnlimitedResyncs,
+		store:              metaKV,
+		directory:          directory,
+		syncClient:         syncClient,
+		verifierMetrics:    verifierMetrics,
+		logger:             processLogger,
+		resyncInMemory:     opts.ResyncInMemory,
+		resyncScratchBytes: opts.ResyncScratchBytes,
+		resyncInterval:     opts.effectiveResyncInterval(),
+		unlimitedResyncs:   opts.UnlimitedResyncs,
 		orch: orchestrator.Config{
 			DataDir:    opts.DataDir,
-			FS:         opts.StorageFS,
+			FS:         archiveFS,
 			RelayURL:   opts.RelayURL,
 			HTTPClient: xrpcClient.HTTPClient.Val(),
 			Directory:  directory,
@@ -607,6 +614,7 @@ func Build(ctx context.Context, opts Options) (*Runtime, error) {
 	xrpcMetrics := xrpcapi.NewMetrics(metrics.Registry)
 	xrpcSrv := xrpcapi.New(xrpcapi.Config{
 		Src:    mft,
+		Opener: xrpcapi.FileOpener{Src: mft, DropReadCache: opts.DropArchiveReadCache},
 		Logger: processLogger,
 		Ready: lifecycle.AllReady(phaseReady, lifecycle.ReadinessFunc(func(ctx context.Context) error {
 			if err := mft.Wait(ctx); err != nil {

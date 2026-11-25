@@ -3,7 +3,9 @@ package catalog
 import (
 	"math/rand/v2"
 	"slices"
+	"strings"
 	"testing"
+	"unsafe"
 
 	"github.com/bluesky-social/jetstream/segment"
 	"github.com/stretchr/testify/require"
@@ -174,4 +176,17 @@ func TestLogEntry_CopiesPayloadAndMemoizes(t *testing.T) {
 	first := e.LoadOrStoreMemo("a")
 	require.Equal(t, "a", first)
 	require.Equal(t, "a", e.LoadOrStoreMemo("b"), "the first stored memo wins")
+}
+
+func TestLogEntryOwnsFrameStrings(t *testing.T) {
+	t.Parallel()
+	frame := strings.Repeat("x", 4096)
+	source := segment.Event{DID: frame[:32], Collection: frame[32:48], Rkey: frame[48:60], Rev: frame[60:73]}
+	stored := NewLogEntry(&source).Event()
+	require.Equal(t, source, *stored)
+	for _, pair := range [][2]string{{stored.DID, source.DID}, {stored.Collection, source.Collection}, {stored.Rkey, source.Rkey}, {stored.Rev, source.Rev}} {
+		if unsafe.StringData(pair[0]) == unsafe.StringData(pair[1]) {
+			t.Error("readable log retained the source frame")
+		}
+	}
 }

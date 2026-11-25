@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"unsafe"
 
 	"github.com/bluesky-social/jetstream/internal/metastore"
 	"github.com/bluesky-social/jetstream/internal/metastore/pebblestore"
@@ -670,4 +671,30 @@ func TestStateStore_FailedGroupCarriesEveryBatch(t *testing.T) {
 		require.NotNil(t, durable, "did=%s", did)
 		require.Equal(t, want, durable.Rev)
 	}
+}
+
+func TestRecentCacheOwnsFrameDID(t *testing.T) {
+	t.Parallel()
+	c := newRecentCache(2)
+	freshDID := func() atmos.DID { return atmos.DID(strings.Clone("did:plc:test" + strings.Repeat("x", 4096))[:12]) }
+	assertOwned := func(source atmos.DID) {
+		t.Helper()
+		for key := range c.cur {
+			if key == source && unsafe.StringData(string(key)) == unsafe.StringData(string(source)) {
+				t.Error("chain cache retained the source frame")
+			}
+		}
+	}
+	first := freshDID()
+	c.put(first, []byte{1})
+	assertOwned(first)
+	update := freshDID()
+	c.put(update, []byte{2})
+	assertOwned(update)
+	c.put("another", nil)
+	promote := freshDID()
+	got, ok := c.get(promote)
+	require.True(t, ok)
+	require.Equal(t, []byte{2}, got)
+	assertOwned(promote)
 }

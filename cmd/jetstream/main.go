@@ -287,6 +287,17 @@ func serveCommand() *cli.Command {
 				Sources: cli.EnvVars("JETSTREAM_FAILED_REPO_RETRY_INTERVAL"),
 				Value:   jetstreamd.DefaultFailedRepoRetryInterval,
 			},
+			&cli.StringFlag{
+				Name:    "resync-store",
+				Usage:   "Store fetched repository blocks on disk or in memory during verifier resync (disk or memory).",
+				Value:   "disk",
+				Sources: cli.EnvVars("JETSTREAM_RESYNC_STORE"),
+			},
+			&cli.Uint64Flag{
+				Name:    "resync-scratch-bytes",
+				Usage:   "Aggregate temporary block bytes allowed during verifier resync. Use a writable disk-backed TMPDIR. Exhausting the budget fails that resync before its chain advances. 0 leaves the byte budget unlimited.",
+				Sources: cli.EnvVars("JETSTREAM_RESYNC_SCRATCH_BYTES"),
+			},
 			&cli.DurationFlag{
 				Name:    "resync-interval",
 				Usage:   "Minimum time between full-repo resyncs of any one DID. Each resync re-archives the whole repo, so this bounds what a repo that keeps failing verification costs. 0 uses the production default.",
@@ -704,6 +715,16 @@ func serveOptionsFromCommand(cmd *cli.Command) (jetstreamd.Options, error) {
 		return jetstreamd.Options{}, err
 	}
 
+	resyncStore := cmd.String("resync-store")
+	if resyncStore != "disk" && resyncStore != "memory" {
+		return jetstreamd.Options{}, fmt.Errorf("serve: --resync-store must be disk or memory, got %q", resyncStore)
+	}
+
+	dropArchiveReadCache, err := archiveReadCacheFromCommand(cmd)
+	if err != nil {
+		return jetstreamd.Options{}, err
+	}
+
 	skipMergeDiscovery := cmd.Bool("skip-merge-discovery")
 	if maxBackfillRepos > 0 || len(backfillRepos) > 0 {
 		skipMergeDiscovery = true
@@ -737,6 +758,8 @@ func serveOptionsFromCommand(cmd *cli.Command) (jetstreamd.Options, error) {
 		BackfillRepos:                  backfillRepos,
 		SkipMergeDiscovery:             skipMergeDiscovery,
 		FailedRepoRetryInterval:        cmd.Duration("failed-repo-retry-interval"),
+		ResyncInMemory:                 resyncStore == "memory",
+		ResyncScratchBytes:             cmd.Uint64("resync-scratch-bytes"),
 		ResyncInterval:                 cmd.Duration("resync-interval"),
 		FailedRepoRetryWorkers:         cmd.Int("failed-repo-retry-workers"),
 		PendingRepoPassWorkers:         cmd.Int("pending-repo-pass-workers"),
@@ -744,6 +767,7 @@ func serveOptionsFromCommand(cmd *cli.Command) (jetstreamd.Options, error) {
 		FailedRepoRetryMaxDelay:        cmd.Duration("failed-repo-retry-max-delay"),
 		DisableRepoActionRateLimits:    cmd.Bool("disable-repo-action-rate-limits"),
 		CursorLookback:                 cmd.Duration("cursor-lookback"),
+		DropArchiveReadCache:           dropArchiveReadCache,
 		CompactionCacheGrace:           cmd.Duration("compaction-cache-grace"),
 		PlanMaxDIDs:                    cmd.Int("plan-max-dids"),
 		PlanMaxCollections:             cmd.Int("plan-max-collections"),

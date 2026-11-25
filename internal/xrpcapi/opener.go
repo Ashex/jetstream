@@ -8,6 +8,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/bluesky-social/jetstream/internal/archivecache"
 	"github.com/bluesky-social/jetstream/segment"
 )
 
@@ -49,7 +50,8 @@ type SegmentOpener interface {
 // generation is pinned by the open fd: an atomic rename during compaction
 // leaves the old inode readable until Close.
 type FileOpener struct {
-	Src SegmentSource
+	Src           SegmentSource
+	DropReadCache bool
 }
 
 var _ SegmentOpener = FileOpener{}
@@ -71,18 +73,24 @@ func (o FileOpener) OpenSegment(_ context.Context, idx uint64) (SegmentFile, err
 		_ = f.Close()
 		return nil, fmt.Errorf("xrpcapi: stat segment %d: %w", idx, err)
 	}
+	file := &localSegmentFile{File: f, size: info.Size(), modTime: info.ModTime()}
+	if o.DropReadCache && archivecache.Supported {
+		file.reader = archivecache.NewReader(f)
+	}
+
 	// ReadSealedHeader validates magic/version, so a corrupt or foreign
 	// file errors instead of serving a confident strong ETag.
-	hdr, err := segment.ReadSealedHeader(f)
+	file.hdr, err = segment.ReadSealedHeader(file)
 	if err != nil {
-		_ = f.Close()
+		_ = file.Close()
 		return nil, fmt.Errorf("xrpcapi: read header of segment %d (%s): %w", idx, ref.Path, err)
 	}
-	return &localSegmentFile{File: f, size: info.Size(), modTime: info.ModTime(), hdr: hdr}, nil
+	return file, nil
 }
 
 type localSegmentFile struct {
 	*os.File
+	reader  *archivecache.Reader
 	size    int64
 	modTime time.Time
 	hdr     segment.Header
@@ -92,7 +100,24 @@ func (f *localSegmentFile) Size() int64            { return f.size }
 func (f *localSegmentFile) Header() segment.Header { return f.hdr }
 func (f *localSegmentFile) ModTime() time.Time     { return f.modTime }
 
-// Content returns the *os.File itself: http.ServeContent reaches sendfile(2)
-// only when the copy source is the file, and any wrapper (SectionReader,
-// bufio) falls back to a userspace copy.
-func (f *localSegmentFile) Content() io.ReadSeeker { return f.File }
+func (f *localSegmentFile) ReadAt(p []byte, off int64) (int, error) {
+	if f.reader != nil {
+		return f.reader.ReadAt(p, off)
+	}
+	return f.File.ReadAt(p, off)
+}
+
+func (f *localSegmentFile) Close() error {
+	if f.reader != nil {
+		return f.reader.Close()
+	}
+	return f.File.Close()
+}
+
+// Keep can use sendfile. Drop tracks completed reads across HTTP range seeks.
+func (f *localSegmentFile) Content() io.ReadSeeker {
+	if f.reader != nil {
+		return f.reader
+	}
+	return f.File
+}

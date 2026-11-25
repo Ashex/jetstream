@@ -103,6 +103,11 @@ type Options struct {
 	PendingRepoPassWorkers         int
 	FailedRepoRetryHostWorkers     int
 	FailedRepoRetryMaxDelay        time.Duration
+	// ResyncInMemory keeps fetched repository blocks in RAM during verification.
+	ResyncInMemory bool
+	// ResyncScratchBytes limits temporary block data across concurrent verifier fetches.
+	// Zero leaves the limit to the scratch filesystem.
+	ResyncScratchBytes uint64
 	// ResyncInterval is how often the verifier may full-repo resync any one
 	// DID. Zero is DefaultResyncInterval.
 	ResyncInterval time.Duration
@@ -151,6 +156,8 @@ type Options struct {
 	PublicListener net.Listener
 	DebugListener  net.Listener
 
+	// DropArchiveReadCache asks Linux to release local archive pages after reading.
+	DropArchiveReadCache           bool
 	CursorLookback                 time.Duration
 	CompactionCacheGrace           time.Duration
 	PlanMaxDIDs                    int

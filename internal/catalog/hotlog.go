@@ -1,6 +1,7 @@
 package catalog
 
 import (
+	"strings"
 	"sync/atomic"
 
 	"github.com/bluesky-social/jetstream/segment"
@@ -43,6 +44,11 @@ type LogEntry struct {
 // never aliases a producer's buffers.
 func NewLogEntry(ev *segment.Event) *LogEntry {
 	cp := *ev
+	// Decoded strings may be slices of the entire relay frame.
+	cp.DID = strings.Clone(ev.DID)
+	cp.Collection = strings.Clone(ev.Collection)
+	cp.Rkey = strings.Clone(ev.Rkey)
+	cp.Rev = strings.Clone(ev.Rev)
 	cp.Payload = append([]byte(nil), ev.Payload...)
 	bytes := int64(len(cp.Payload) + len(cp.DID) + len(cp.Collection) + len(cp.Rkey) + len(cp.Rev) + 128)
 	return &LogEntry{event: cp, bytes: bytes}

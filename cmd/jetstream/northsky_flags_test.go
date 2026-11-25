@@ -109,3 +109,31 @@ func TestNorthskyFlags_RetentionWindowRefusals(t *testing.T) {
 	_, err = serveOptionsFor(t, "--migrate-to-disaggregated", "--retention-window=0")
 	require.NoError(t, err)
 }
+
+// nolint:paralleltest // mutates the process environment
+func TestNorthskyFlags_ArchiveReadCache(t *testing.T) {
+	withClearedEnv(t)
+
+	opts, err := serveOptionsFor(t)
+	require.NoError(t, err)
+	require.False(t, opts.DropArchiveReadCache)
+
+	opts, err = serveOptionsFor(t, "--archive-read-cache=drop")
+	require.NoError(t, err)
+	require.True(t, opts.DropArchiveReadCache)
+
+	t.Setenv("JETSTREAM_ARCHIVE_READ_CACHE", "drop")
+	opts, err = serveOptionsFor(t)
+	require.NoError(t, err)
+	require.True(t, opts.DropArchiveReadCache)
+
+	opts, err = serveOptionsFor(t, "--archive-read-cache=keep")
+	require.NoError(t, err)
+	require.False(t, opts.DropArchiveReadCache)
+
+	_, err = serveOptionsFor(t, "--archive-read-cache=invalid")
+	require.ErrorContains(t, err, "--archive-read-cache must be keep or drop")
+	t.Setenv("JETSTREAM_ARCHIVE_READ_CACHE", "invalid")
+	_, err = serveOptionsFor(t)
+	require.ErrorContains(t, err, "--archive-read-cache must be keep or drop")
+}

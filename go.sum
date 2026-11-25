@@ -1,3 +1,5 @@
+github.com/Ashex/atmos v0.8.1-0.20261125113953-bffebb183656 h1:1gKfDkY0igi8In4zDUYhdfoMWUDQ8TjmMtiSP+aJ/M0=
+github.com/Ashex/atmos v0.8.1-0.20261125113953-bffebb183656/go.mod h1:c2RP4MRqyNO3jJ2pd0C0q5V7443YlYl8VAza+EZYwnA=
 github.com/DataDog/zstd v1.5.7 h1:ybO8RBeh29qrxIhCA9E8gKY6xfONU9T6G6aP9DTKfLE=
 github.com/DataDog/zstd v1.5.7/go.mod h1:g4AWEaM3yOg3HYfnJ3YIawPnVdXJh9QME85blwSAmyw=
 github.com/aws/aws-sdk-go-v2 v1.47.5 h1:5yA+A+BiXbDq1ZLbYwPViwhEGDMdR0MEhL8Jh2LnLS4=
@@ -93,8 +95,6 @@ github.com/jackc/pgx/v5 v5.11.0 h1:IzBBtyK9AHqf98cctWFifYSci2hgQR/cd56wB4p+ogg=
 github.com/jackc/pgx/v5 v5.11.0/go.mod h1:mal1tBGAFfLHvZzaYh77YS/eC6IX9OWbRV1QIIM0Jn4=
 github.com/jackc/puddle/v2 v2.2.3 h1:f8HoREISb3l5eO9coPgK7U3hKLhWGokOFVcThl5jrao=
 github.com/jackc/puddle/v2 v2.2.3/go.mod h1:vriiEXHvEE654aYKXXjOvZM39qJ0q+azkZFrfEOc3H4=
-github.com/jcalabro/atmos v0.8.0 h1:r1VGcG6aXa6e65oHsYBdrw4Dh/EAgxglnYQujg6VpGI=
-github.com/jcalabro/atmos v0.8.0/go.mod h1:eB5yDecPpv2aPVtMZsNPSGdjcKD944t0hQ1S+9Ay77U=
 github.com/jcalabro/gloom v0.1.0 h1:Z8VTAMrdRNXr11tt9c5pIpDDJxAHg3QIBrHFt5x2I2M=
 github.com/jcalabro/gloom v0.1.0/go.mod h1:6uAawINljQYLN3a2YsekJ8LDYT/SobmJyfeKrSjHVx0=
 github.com/jcalabro/gt v0.0.14 h1:m5Go+0xX+Atb3PbS1rLuNrFWiO0w1bdZlAoxbBITzXc=

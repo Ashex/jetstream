@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"strings"
 	"sync"
 
 	"github.com/bluesky-social/jetstream/internal/metastore"
@@ -204,7 +205,8 @@ func (c *recentCache) put(did atmos.DID, v []byte) {
 		c.prev, c.cur = c.cur, make(map[atmos.DID][]byte, len(c.cur))
 	}
 	delete(c.prev, did)
-	c.cur[did] = v
+	// A map assignment can replace the stored key even on an update.
+	c.cur[atmos.DID(strings.Clone(string(did)))] = v
 }
 
 func (c *recentCache) delete(did atmos.DID) {

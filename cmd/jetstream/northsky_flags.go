@@ -19,12 +19,29 @@ func northskyServeFlags() []cli.Flag {
 			Usage:   "Start a fresh data dir at the relay's live tip: no listHosts/listRepos/getRepo bootstrap and no merge; the archive holds only what it sees from then on. No effect once the data dir is in steady_state; refused on a data dir mid-bootstrap.",
 			Sources: cli.EnvVars("JETSTREAM_LIVE_ONLY"),
 		},
+		&cli.StringFlag{
+			Name:    "archive-read-cache",
+			Usage:   "Local archive read page cache policy: keep preserves caching; drop asks Linux to release fully read pages.",
+			Sources: cli.EnvVars("JETSTREAM_ARCHIVE_READ_CACHE"),
+			Value:   "keep",
+		},
 		&cli.DurationFlag{
 			Name:    "retention-window",
 			Usage:   "Delete sealed segments whose newest event is older than this, at the end of each compaction pass. Requests below the resulting floor are refused, never skipped. 0 keeps everything. Local storage only. The default prunes only a data dir started with --live-only.",
 			Sources: cli.EnvVars("JETSTREAM_RETENTION_WINDOW"),
 			Value:   defaultRetentionWindow,
 		},
+	}
+}
+
+func archiveReadCacheFromCommand(cmd *cli.Command) (bool, error) {
+	switch policy := cmd.String("archive-read-cache"); policy {
+	case "keep":
+		return false, nil
+	case "drop":
+		return true, nil
+	default:
+		return false, fmt.Errorf("serve: --archive-read-cache must be keep or drop, got %q", policy)
 	}
 }
 

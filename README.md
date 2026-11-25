@@ -20,6 +20,28 @@ See the [jetstream documentation website](https://bsky.network/docs/jetstream/) 
 
 See the original [RFD](https://github.com/bluesky-social/jetstream/blob/main/docs/README.md) for the project goals and design.
 
+## Verifier storage and archive caching
+
+Set these options on `jetstream serve`, using flags or environment variables.
+
+| Flag | Environment variable | Values |
+| --- | --- | --- |
+| `--resync-store` | `JETSTREAM_RESYNC_STORE` | `disk` (default) stores fetched repository blocks in temporary files under `TMPDIR`. `memory` keeps the blocks in RAM. |
+| `--resync-scratch-bytes` | `JETSTREAM_RESYNC_SCRATCH_BYTES` | Shared byte limit for temporary blocks across concurrent resyncs. The default `0` is unlimited. Use `0` with the memory store. |
+| `--archive-read-cache` | `JETSTREAM_ARCHIVE_READ_CACHE` | `keep` (default) uses normal OS caching. On Linux, `drop` asks the kernel to release fully read pages from local archive segments. Use a disk-backed filesystem. |
+
+For disk-backed resyncs with a 16 GiB budget, mount a writable disk directory at `/scratch` in the container and run:
+
+```sh
+TMPDIR=/scratch jetstream serve --resync-store=disk --resync-scratch-bytes=17179869184
+```
+
+To keep resyncs in memory and release local archive pages after reads:
+
+```sh
+jetstream serve --resync-store=memory --archive-read-cache=drop
+```
+
 ## Examples
 
 See [examples](https://github.com/bluesky-social/jetstream/tree/main/examples) for a few minimal jetstream usage programs.
