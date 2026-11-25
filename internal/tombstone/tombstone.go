@@ -198,59 +198,48 @@ func (s Snapshot) Merge(other Snapshot) {
 // observeLocked folds one event into the maps and returns the
 // approximate bytes added by any newly inserted entry.
 //
-// Inserted keys are CLONED: events decoded from segment blocks alias
-// the block's decompressed buffer (segment decode contract), and a
-// retained map key would pin the entire multi-MB buffer for the life
-// of the entry. Lookups probe with the aliased strings first so the
-// clone is paid only on first insert.
+// A newer assignment can replace the stored key as well as its value. Clone
+// every key written from an event so the live set cannot retain its frame.
 func observeLocked(records map[RecordKey]uint64, dids map[string]DIDTombstone, ev *segment.Event) (int64, error) {
 	switch ev.Kind {
 	case segment.KindDelete, segment.KindUpdate:
-		probe := RecordKey{DID: ev.DID, Collection: ev.Collection, Rkey: ev.Rkey}
-		if old, ok := records[probe]; ok {
-			if ev.Seq > old {
-				// Updating via the aliased probe key keeps the
-				// originally-inserted (cloned) key in the map.
-				records[probe] = ev.Seq
-			}
+		key := RecordKey{DID: ev.DID, Collection: ev.Collection, Rkey: ev.Rkey}
+		old, exists := records[key]
+		if exists && old >= ev.Seq {
 			return 0, nil
 		}
-		key := RecordKey{
-			DID:        strings.Clone(ev.DID),
-			Collection: strings.Clone(ev.Collection),
-			Rkey:       strings.Clone(ev.Rkey),
-		}
+		key.DID = strings.Clone(key.DID)
+		key.Collection = strings.Clone(key.Collection)
+		key.Rkey = strings.Clone(key.Rkey)
 		records[key] = ev.Seq
+		if exists {
+			return 0, nil
+		}
 		return recordEntryBytes(key), nil
 	case segment.KindSync:
-		if old, ok := dids[ev.DID]; ok {
-			if ev.Seq > old.Seq {
-				dids[ev.DID] = DIDTombstone{Seq: ev.Seq, Reason: "sync"}
-			}
-			return 0, nil
-		}
-		did := strings.Clone(ev.DID)
-		dids[did] = DIDTombstone{Seq: ev.Seq, Reason: "sync"}
-		return didEntryBytes(did), nil
+		return observeDID(dids, ev.DID, DIDTombstone{Seq: ev.Seq, Reason: "sync"}), nil
 	case segment.KindAccount:
 		deleted, err := accountDeleted(ev.Payload)
 		if err != nil {
 			return 0, fmt.Errorf("tombstone: decode account did=%s seq=%d: %w", ev.DID, ev.Seq, err)
 		}
-		if !deleted {
-			return 0, nil
+		if deleted {
+			return observeDID(dids, ev.DID, DIDTombstone{Seq: ev.Seq, Reason: "account"}), nil
 		}
-		if old, ok := dids[ev.DID]; ok {
-			if ev.Seq > old.Seq {
-				dids[ev.DID] = DIDTombstone{Seq: ev.Seq, Reason: "account"}
-			}
-			return 0, nil
-		}
-		did := strings.Clone(ev.DID)
-		dids[did] = DIDTombstone{Seq: ev.Seq, Reason: "account"}
-		return didEntryBytes(did), nil
 	}
 	return 0, nil
+}
+
+func observeDID(dids map[string]DIDTombstone, did string, next DIDTombstone) int64 {
+	old, exists := dids[did]
+	if exists && old.Seq >= next.Seq {
+		return 0
+	}
+	dids[strings.Clone(did)] = next
+	if exists {
+		return 0
+	}
+	return didEntryBytes(did)
 }
 
 func accountDeleted(payload []byte) (bool, error) {
