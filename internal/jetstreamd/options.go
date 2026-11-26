@@ -108,6 +108,8 @@ type Options struct {
 	// ResyncScratchBytes limits temporary block data across concurrent verifier fetches.
 	// Zero leaves the limit to the scratch filesystem.
 	ResyncScratchBytes uint64
+	// MaxConcurrentResyncs caps full repository verification across all resync paths.
+	MaxConcurrentResyncs uint
 	// ResyncInterval is how often the verifier may full-repo resync any one
 	// DID. Zero is DefaultResyncInterval.
 	ResyncInterval time.Duration

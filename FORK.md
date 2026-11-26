@@ -41,6 +41,7 @@ New code lives in new files where it can; upstream files get wiring only.
 
 | Patch | Files | What |
 |---|---|---|
+| Verifier resources | `internal/jetstreamd/`, `cmd/jetstream/`, and the pinned Ashex Atmos module | `--max-concurrent-resyncs` shares one limit across full repository fetch and apply for inline, background and manual resyncs. Zero keeps the existing worker limits. `--resync-store` and `--resync-scratch-bytes` select block storage and bound temporary disk usage. |
 | Tombstone key ownership | `internal/tombstone/` | Clone event-backed strings on insert and on newer updates so the live set can release decoded blocks after rebuilding. The latest sequence and deletion reason remain the same. |
 | Retention floor and live-only marker | `internal/retention/` (new) | `retention/floor` and `retention/live_only_since` in the metastore, and the per-process `Holder` every read surface checks |
 | Live-only start | `internal/ingest/orchestrator/liveonly.go` (new), `orchestrator.go`, `config.go`; `internal/jetstreamd/options.go`, `runtime.go`, `disagg.go`; `cmd/jetstream/northsky_flags.go` (new), `main.go` | A fresh data dir with `LiveOnly` writes the compaction watermark floor, the marker, then `phase=steady_state` last, and starts at the relay's live tip (no cursor). Refused on a data dir in `bootstrap` or `merging`, with backfill flags, and with disaggregated storage |

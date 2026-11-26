@@ -27,6 +27,7 @@ Set these options on `jetstream serve`, using flags or environment variables.
 | Flag | Environment variable | Values |
 | --- | --- | --- |
 | `--resync-store` | `JETSTREAM_RESYNC_STORE` | `disk` (default) stores fetched repository blocks in temporary files under `TMPDIR`. `memory` keeps the blocks in RAM. |
+| `--max-concurrent-resyncs` | `JETSTREAM_MAX_CONCURRENT_RESYNCS` | Maximum full repository resyncs fetching or applying at once across live and background verification. The default `0` uses the existing worker limits. |
 | `--resync-scratch-bytes` | `JETSTREAM_RESYNC_SCRATCH_BYTES` | Shared byte limit for temporary blocks across concurrent resyncs. The default `0` is unlimited. Use `0` with the memory store. |
 | `--archive-read-cache` | `JETSTREAM_ARCHIVE_READ_CACHE` | `keep` (default) uses normal OS caching. On Linux, `drop` asks the kernel to release fully read pages from local archive segments. Use a disk-backed filesystem. |
 

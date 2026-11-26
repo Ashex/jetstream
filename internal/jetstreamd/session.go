@@ -59,10 +59,11 @@ type sessionFactory struct {
 	logger          *slog.Logger
 	// resyncInterval and unlimitedResyncs set the verifier's per-DID resync
 	// budget (Options.ResyncInterval, Options.UnlimitedResyncs).
-	resyncInMemory     bool
-	resyncScratchBytes uint64
-	resyncInterval     time.Duration
-	unlimitedResyncs   bool
+	resyncInMemory       bool
+	resyncScratchBytes   uint64
+	maxConcurrentResyncs uint
+	resyncInterval       time.Duration
+	unlimitedResyncs     bool
 
 	// orch is the orchestrator config with every process-lifetime field set.
 	// build fills in the per-session ones.
@@ -116,13 +117,14 @@ func (f *sessionFactory) newVerifier(stateStore atmossync.StateStore) (*atmossyn
 	}
 	verifierLogger := f.logger.With(slog.String("component", "verifier"))
 	verifier, err := atmossync.NewVerifier(atmossync.VerifierOptions{
-		Directory:          f.directory,
-		StateStore:         stateStore,
-		SyncClient:         gt.Some(f.syncClient),
-		ResyncDiskStore:    gt.Some(!f.resyncInMemory),
-		ResyncScratchBytes: gt.Some(f.resyncScratchBytes),
-		ResyncLimit:        gt.Some(resyncLimit),
-		ResyncBurst:        gt.Some(resyncBurst),
+		Directory:            f.directory,
+		StateStore:           stateStore,
+		SyncClient:           gt.Some(f.syncClient),
+		ResyncDiskStore:      gt.Some(!f.resyncInMemory),
+		ResyncScratchBytes:   gt.Some(f.resyncScratchBytes),
+		MaxConcurrentResyncs: f.maxConcurrentResyncs,
+		ResyncLimit:          gt.Some(resyncLimit),
+		ResyncBurst:          gt.Some(resyncBurst),
 		OnVerificationFailure: gt.Some(func(did atmos.DID, vErr error) {
 			f.verifierMetrics.IncFailure(obs.Classify(vErr))
 			verifierLogger.Warn("verification failure",

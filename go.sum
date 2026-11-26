@@ -1,5 +1,5 @@
-github.com/Ashex/atmos v0.8.1-0.20261125113953-bffebb183656 h1:1gKfDkY0igi8In4zDUYhdfoMWUDQ8TjmMtiSP+aJ/M0=
-github.com/Ashex/atmos v0.8.1-0.20261125113953-bffebb183656/go.mod h1:c2RP4MRqyNO3jJ2pd0C0q5V7443YlYl8VAza+EZYwnA=
+github.com/Ashex/atmos v0.8.1-0.20261126091622-1679fc83d543 h1:pNbHiqLRdXcJkEF1qdj/Y4Qo1ep0gItVlJRl0am4Syg=
+github.com/Ashex/atmos v0.8.1-0.20261126091622-1679fc83d543/go.mod h1:c2RP4MRqyNO3jJ2pd0C0q5V7443YlYl8VAza+EZYwnA=
 github.com/DataDog/zstd v1.5.7 h1:ybO8RBeh29qrxIhCA9E8gKY6xfONU9T6G6aP9DTKfLE=
 github.com/DataDog/zstd v1.5.7/go.mod h1:g4AWEaM3yOg3HYfnJ3YIawPnVdXJh9QME85blwSAmyw=
 github.com/aws/aws-sdk-go-v2 v1.47.5 h1:5yA+A+BiXbDq1ZLbYwPViwhEGDMdR0MEhL8Jh2LnLS4=

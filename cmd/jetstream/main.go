@@ -293,6 +293,11 @@ func serveCommand() *cli.Command {
 				Value:   "disk",
 				Sources: cli.EnvVars("JETSTREAM_RESYNC_STORE"),
 			},
+			&cli.UintFlag{
+				Name:    "max-concurrent-resyncs",
+				Usage:   "Maximum simultaneous full repository resyncs across live and background verification. 0 uses the existing worker limits.",
+				Sources: cli.EnvVars("JETSTREAM_MAX_CONCURRENT_RESYNCS"),
+			},
 			&cli.Uint64Flag{
 				Name:    "resync-scratch-bytes",
 				Usage:   "Aggregate temporary block bytes allowed during verifier resync. Use a writable disk-backed TMPDIR. Exhausting the budget fails that resync before its chain advances. 0 leaves the byte budget unlimited.",
@@ -761,6 +766,7 @@ func serveOptionsFromCommand(cmd *cli.Command) (jetstreamd.Options, error) {
 		ResyncInMemory:                 resyncStore == "memory",
 		ResyncScratchBytes:             cmd.Uint64("resync-scratch-bytes"),
 		ResyncInterval:                 cmd.Duration("resync-interval"),
+		MaxConcurrentResyncs:           cmd.Uint("max-concurrent-resyncs"),
 		FailedRepoRetryWorkers:         cmd.Int("failed-repo-retry-workers"),
 		PendingRepoPassWorkers:         cmd.Int("pending-repo-pass-workers"),
 		FailedRepoRetryHostWorkers:     cmd.Int("failed-repo-retry-host-workers"),

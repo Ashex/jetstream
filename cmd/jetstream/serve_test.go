@@ -215,6 +215,7 @@ func TestServeOptionsFromCLI_Overrides(t *testing.T) {
 		"--skip-merge-discovery",
 		"--failed-repo-retry-interval=2h",
 		"--resync-scratch-bytes=5000000000",
+		"--max-concurrent-resyncs=4",
 		"--resync-interval=25m",
 		"--failed-repo-retry-workers=9",
 		"--failed-repo-retry-host-workers=3",
@@ -259,6 +260,7 @@ func TestServeOptionsFromCLI_Overrides(t *testing.T) {
 	require.True(t, opts.SkipMergeDiscovery)
 	require.Equal(t, 2*time.Hour, opts.FailedRepoRetryInterval)
 	require.Equal(t, uint64(5000000000), opts.ResyncScratchBytes)
+	require.Equal(t, uint(4), opts.MaxConcurrentResyncs)
 	require.Equal(t, 25*time.Minute, opts.ResyncInterval)
 	require.Equal(t, 9, opts.FailedRepoRetryWorkers)
 	require.Equal(t, 3, opts.FailedRepoRetryHostWorkers)
@@ -310,6 +312,7 @@ func TestServeOptionsFromCLI_BackfillSchedulerEnv(t *testing.T) {
 	t.Setenv("JETSTREAM_BACKFILL_ASYNC_FLUSH_WORKERS", "5")
 	t.Setenv("JETSTREAM_FAILED_REPO_RETRY_INTERVAL", "3h")
 	t.Setenv("JETSTREAM_RESYNC_SCRATCH_BYTES", "123456")
+	t.Setenv("JETSTREAM_MAX_CONCURRENT_RESYNCS", "12")
 	t.Setenv("JETSTREAM_RESYNC_INTERVAL", "1h")
 	t.Setenv("JETSTREAM_FAILED_REPO_RETRY_WORKERS", "11")
 	t.Setenv("JETSTREAM_FAILED_REPO_RETRY_HOST_WORKERS", "2")
@@ -325,6 +328,7 @@ func TestServeOptionsFromCLI_BackfillSchedulerEnv(t *testing.T) {
 	require.Equal(t, 5, opts.BackfillAsyncFlushWorkers)
 	require.Equal(t, 3*time.Hour, opts.FailedRepoRetryInterval)
 	require.Equal(t, uint64(123456), opts.ResyncScratchBytes)
+	require.Equal(t, uint(12), opts.MaxConcurrentResyncs)
 	require.Equal(t, time.Hour, opts.ResyncInterval)
 	require.Equal(t, 11, opts.FailedRepoRetryWorkers)
 	require.Equal(t, 2, opts.FailedRepoRetryHostWorkers)

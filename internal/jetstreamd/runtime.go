@@ -441,15 +441,16 @@ func Build(ctx context.Context, opts Options) (*Runtime, error) {
 	// Store, Verifier, SyncStateStore, Tombstones, and CompactionSchedule are
 	// per-session; sessionFactory.build fills them in.
 	rt.sessions = &sessionFactory{
-		store:              metaKV,
-		directory:          directory,
-		syncClient:         syncClient,
-		verifierMetrics:    verifierMetrics,
-		logger:             processLogger,
-		resyncInMemory:     opts.ResyncInMemory,
-		resyncScratchBytes: opts.ResyncScratchBytes,
-		resyncInterval:     opts.effectiveResyncInterval(),
-		unlimitedResyncs:   opts.UnlimitedResyncs,
+		store:                metaKV,
+		directory:            directory,
+		syncClient:           syncClient,
+		verifierMetrics:      verifierMetrics,
+		logger:               processLogger,
+		resyncInMemory:       opts.ResyncInMemory,
+		resyncScratchBytes:   opts.ResyncScratchBytes,
+		maxConcurrentResyncs: opts.MaxConcurrentResyncs,
+		resyncInterval:       opts.effectiveResyncInterval(),
+		unlimitedResyncs:     opts.UnlimitedResyncs,
 		orch: orchestrator.Config{
 			DataDir:    opts.DataDir,
 			FS:         archiveFS,
